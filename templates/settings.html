@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}设置 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>设置</h1>
+  <p class="sub">模型接口与生成参数 · 只保存在本机 SQLite</p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<form method="post" action="/settings" class="settings-form">
+  <fieldset>
+    <legend>模型接口（OpenAI 兼容）</legend>
+
+    <label>接口地址 base_url
+      <input type="text" name="llm_base_url" value="{{ settings.llm_base_url }}"
+             placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1">
+    </label>
+    <p class="hint">填到 <code>/v1</code> 即可，工作台会自动补 <code>/chat/completions</code>。</p>
+
+    <label>API Key
+      <input type="password" name="llm_api_key" value="" placeholder="{{ masked or 'sk-…' }}">
+    </label>
+    <p class="hint">{% if masked %}当前已配置：{{ masked }}；留空表示不修改。{% else %}还没有配置。{% endif %}</p>
+
+    <label>模型名称
+      <input type="text" name="llm_model" value="{{ settings.llm_model }}" placeholder="qwen-plus">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>生成参数</legend>
+    <div class="row-2">
+      <label>temperature
+        <input type="text" name="llm_temperature" value="{{ settings.llm_temperature }}">
+      </label>
+      <label>max_tokens
+        <input type="text" name="llm_max_tokens" value="{{ settings.llm_max_tokens }}">
+      </label>
+      <label>单篇最大入参字符
+        <input type="text" name="max_paper_chars" value="{{ settings.max_paper_chars }}">
+      </label>
+    </div>
+    <p class="hint">论文全文超过上限会被截断，并在提示词里明确告知模型未覆盖的部分不要臆测。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>选题雷达（arXiv）</legend>
+    <label>关键词（每行一个，用英文检索词效果最好）
+      <textarea name="radar_keywords" rows="5" class="plain">{{ settings.radar_keywords }}</textarea>
+    </label>
+    <div class="row-2" style="margin-top: 10px;">
+      <label>每个关键词取几条
+        <input type="text" name="radar_per_keyword" value="{{ settings.radar_per_keyword }}">
+      </label>
+      <label>只看最近多少天
+        <input type="text" name="radar_max_age_days" value="{{ settings.radar_max_age_days }}">
+      </label>
+    </div>
+    <p class="hint">抓取走 arXiv 官方 API，关键词越多耗时越长（请求之间留 1 秒间隔）。</p>
+  </fieldset>
+
+  <div class="form-actions">
+    <button class="btn primary" type="submit">保存</button>
+    <button class="btn" type="button" hx-post="/settings/probe" hx-target="#probe" hx-swap="innerHTML">测试连接</button>
+  </div>
+</form>
+
+<div id="probe"></div>
+
+{% endblock %}

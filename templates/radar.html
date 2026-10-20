@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}选题雷达 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>选题雷达</h1>
+  <p class="sub">
+    按关键词从 arXiv 发现新论文
+    <span class="muted">— 闸门 0：先看候选，再决定要不要抓下来精读</span>
+  </p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<section class="actionbar">
+  <form method="post" action="/radar/fetch" class="genform">
+    <button class="btn primary" type="submit">抓取最新候选</button>
+  </form>
+  <div class="chips">
+    {% for k in keywords %}<span class="chip">{{ k }}</span>{% else %}<span class="muted">还没有关键词</span>{% endfor %}
+  </div>
+  <a class="btn ghost" href="/settings">改关键词</a>
+</section>
+{% if last_fetch %}<p class="hint">上次抓取：{{ last_fetch }}（抓取约需数秒到十几秒，取决于关键词数量）</p>{% endif %}
+
+<section class="tabs-row">
+  <a class="tab {{ 'on' if status == 'new' else '' }}" href="/radar?status=new">待选题 {{ counts.get('new', 0) }}</a>
+  <a class="tab {{ 'on' if status == 'imported' else '' }}" href="/radar?status=imported">已导入 {{ counts.get('imported', 0) }}</a>
+  <a class="tab {{ 'on' if status == 'dismissed' else '' }}" href="/radar?status=dismissed">已忽略 {{ counts.get('dismissed', 0) }}</a>
+  <a class="tab {{ 'on' if status == 'all' else '' }}" href="/radar?status=all">全部</a>
+</section>
+
+{% if candidates %}
+<section class="cand-list">
+{% for c in candidates %}
+  <article class="cand">
+    <div class="cand-head">
+      <span class="score-badge {{ 'high' if c.score >= 7 else ('mid' if c.score >= 4 else 'low') }}"
+            title="可解释加权分：会议线索 / 开源 / 标题命中 / 新鲜度">{{ c.score }}</span>
+      <h3><a href="{{ c.url }}" target="_blank" rel="noreferrer">{{ c.title }}</a></h3>
+    </div>
+    <p class="cand-meta">
+      {{ c.published }}
+      {% if c.authors %}· {{ c.authors }}{% endif %}
+      {% if c.categories %}· {{ c.categories }}{% endif %}
+      {% if c.keyword %}<span class="kw">命中：{{ c.keyword }}</span>{% endif %}
+    </p>
+    {% if c.reasons %}
+    <p class="reasons">
+      {% for r in c.reasons.split('；') %}<span class="reason-chip">{{ r }}</span>{% endfor %}
+    </p>
+    {% endif %}
+    <p class="cand-abstract">{{ c.abstract }}</p>
+    <div class="cand-actions">
+      {% if c.status == 'imported' %}
+        <span class="pill ready">已建档</span>
+        {% if c.paper_uid %}<a class="btn tiny ghost" href="/library">去论文库</a>{% endif %}
+        <form method="post" action="/radar/{{ c.uid }}/dismiss" class="inline">
+          <button class="btn tiny ghost" type="submit">忽略</button>
+        </form>
+      {% elif c.status == 'dismissed' %}
+        <form method="post" action="/radar/{{ c.uid }}/restore" class="inline">
+          <button class="btn tiny" type="submit">恢复</button>
+        </form>
+      {% else %}
+        <form method="post" action="/radar/{{ c.uid }}/import" class="inline">
+          <button class="btn tiny primary" type="submit">下载并建档</button>
+        </form>
+        <form method="post" action="/radar/{{ c.uid }}/dismiss" class="inline">
+          <button class="btn tiny ghost" type="submit">忽略</button>
+        </form>
+      {% endif %}
+      <a class="btn tiny ghost" href="{{ c.url }}" target="_blank" rel="noreferrer">arXiv</a>
+    </div>
+  </article>
+{% endfor %}
+</section>
+{% else %}
+<section class="empty">
+  <p>这个分类下还没有候选。</p>
+  <p class="big">点上面「抓取最新候选」。</p>
+</section>
+{% endif %}
+
+{% endblock %}

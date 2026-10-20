@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}选题池 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>选题池</h1>
+  <p class="sub">
+    已选题 <strong>{{ selected | length }}</strong> 篇 · 其中已完成解读 <strong>{{ selected_ready }}</strong> 篇
+    <span class="muted">— 这里是第一道闸门：你勾的才进入生产</span>
+  </p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<section class="actionbar">
+  <form method="post" action="/inbox/batch" class="genform">
+    <label>引擎
+      <select name="engine">
+        <option value="builtin">内置模型</option>
+        <option value="dsh">交给 DSH</option>
+      </select>
+    </label>
+    <button class="btn primary" type="submit"{{ ' disabled' if not selected else '' }}>
+      开始生产{{ '（已勾 %d 篇）' % (selected | length) if selected else '' }}
+    </button>
+  </form>
+  <span class="muted small">
+    {% if selected %}队列串行执行，一篇跑完自动接下一篇{% else %}先点下方卡片上的「加入选题」，才会进入生产队列{% endif %}
+  </span>
+</section>
+
+{% if papers %}
+<section class="pick-grid">
+  {% for p in papers %}
+  <article class="pick-card {{ 'picked' if p.selected else '' }}">
+    <div class="pick-top">
+      <span class="pill {{ p.draft_status or 'empty' }}">{{ status_labels.get(p.draft_status, p.draft_status or '未建档') }}</span>
+      <span class="muted small">{{ p.pages or '—' }} 页</span>
+    </div>
+    <h3 class="pick-title" title="{{ p.path }}">{{ p.filename }}</h3>
+    <p class="muted small">
+      {% if p.draft_status == 'ready' %}{{ p.word_count }} 字解读{% else %}尚未解读{% endif %}
+    </p>
+    <div class="pick-actions">
+      <form method="post" action="/inbox/{{ p.uid }}/select" class="inline">
+        <input type="hidden" name="selected" value="{{ 0 if p.selected else 1 }}">
+        <button class="btn tiny {{ 'ghost' if p.selected else '' }}" type="submit">
+          {{ '移出选题' if p.selected else '加入选题' }}
+        </button>
+      </form>
+      {% if p.draft_uid %}
+        <a class="btn tiny ghost" href="/draft/{{ p.draft_uid }}">打开解读</a>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% else %}
+<section class="empty">
+  <p>论文库还是空的。</p>
+  <p class="big">先去 <a href="/library">论文库</a> 扫描或上传 PDF。</p>
+</section>
+{% endif %}
+
+{% endblock %}

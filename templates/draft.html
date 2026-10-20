@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ draft.title or '稿件' }} · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div class="crumb">
+    <a href="/library">论文库</a> /
+    {% if draft.kind == 'article' %}
+      {% if draft.parent_uid %}<a href="/draft/{{ draft.parent_uid }}">解读</a> / {% endif %}公众号稿
+    {% else %}论文解读{% endif %}
+  </div>
+  <h1>{{ draft.title or '未命名稿件' }}</h1>
+  <p class="sub">
+    <span class="pill {{ draft.status }}">{{ status_labels.get(draft.status, draft.status) }}</span>
+    {% if paper %}<span class="muted">{{ paper.filename }} · {{ paper.pages }} 页</span>{% endif %}
+    <span class="muted">v{{ draft.version }}</span>
+    {% if draft.model %}<span class="muted">{{ draft.model }}</span>{% endif %}
+    {% if draft.engine %}<span class="muted">引擎：{{ engine_labels.get(draft.engine, draft.engine) }}</span>{% endif %}
+  </p>
+</div>
+
+{% if draft.error %}<div class="banner bad"><strong>出错了</strong> {{ draft.error }}</div>{% endif %}
+
+{% if draft.kind == 'article' %}
+<div class="banner ok">
+  这是公众号稿的正文编辑页。<a href="/article/{{ draft.uid }}">去终审页</a> 看标题候选、摘要卡与导出。
+</div>
+{% else %}
+
+<section class="genbar">
+  <form method="post" action="/draft/{{ draft.uid }}/generate" class="genform">
+    <label>引擎
+      <select name="engine">
+        <option value="builtin"{{ ' selected' if draft.engine != 'dsh' else '' }}>内置模型</option>
+        <option value="dsh"{{ ' selected' if draft.engine == 'dsh' else '' }}>交给 DSH</option>
+      </select>
+    </label>
+    <label class="grow">额外关注（可选）
+      <input type="text" name="focus" placeholder="例如：重点讲训练策略 / 与 PEM-CA 的差异">
+    </label>
+    <button class="btn primary" type="submit"{{ ' disabled' if draft.status == 'running' else '' }}>
+      {{ '生成中…' if draft.status == 'running' else '生成解读' }}
+    </button>
+  </form>
+  {% if not has_key %}
+  <p class="hint">内置引擎需要先在 <a href="/settings">设置</a> 里填 API Key；也可以选「交给 DSH」，由会话执行后粘贴回来。</p>
+  {% endif %}
+</section>
+
+{% if draft.status == 'running' %}
+  {% include "_panel.html" %}
+{% endif %}
+
+{% if draft.status == 'awaiting' %}
+<div class="banner warn">
+  已生成 DSH 任务文件：<code>{{ task_path }}</code><br>
+  把它发给会话执行，产出后粘贴到下方编辑框并保存。
+</div>
+{% endif %}
+
+{% if draft.status == 'ready' %}
+<section class="next-step">
+  <div class="next-head">
+    <strong>下一步：改写成公众号文章</strong>
+    <span class="muted small">01–07 结构 · 摘要卡 · 封面文案 · 标题候选</span>
+  </div>
+  <form method="post" action="/draft/{{ draft.uid }}/article" class="genform">
+    <label>引擎
+      <select name="engine">
+        <option value="builtin">内置模型</option>
+        <option value="dsh">交给 DSH</option>
+      </select>
+    </label>
+    <label>文章类型
+      <select name="preset">
+        {% for p in presets %}
+        <option value="{{ p.key }}" title="{{ p.hint }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="grow">本篇侧重（可选）
+      <input type="text" name="angle" placeholder="例如：面向工业落地，强调部署成本">
+    </label>
+    <button class="btn primary" type="submit">生成公众号文章 →</button>
+  </form>
+</section>
+{% endif %}
+
+{% if trace %}
+<section class="review-grid" style="margin: 6px 0 20px;">
+  {% include "_trace.html" %}
+</section>
+{% endif %}
+
+{% endif %}
+
+<section class="split">
+  <form method="post" action="/{{ 'article' if draft.kind == 'article' else 'draft' }}/{{ draft.uid }}/save" class="pane editor-pane">
+    <div class="pane-head">
+      <span>编辑 · Markdown</span>
+      <button class="btn tiny primary" type="submit">保存</button>
+    </div>
+    <input type="text" name="title" value="{{ draft.title }}" class="title-input" placeholder="标题">
+    <textarea name="content" id="content" spellcheck="false" placeholder="还没有内容。点上方按钮生成，或把外部产出粘贴到这里。">{{ draft.content }}</textarea>
+  </form>
+
+  <div class="pane preview-pane">
+    <div class="pane-head"><span>预览</span><span class="muted small">{{ draft.content | length }} 字</span></div>
+    <article class="prose">{{ preview }}</article>
+  </div>
+</section>
+
+<script>
+  const area = document.getElementById('content');
+  function fit() {
+    if (!area) return;
+    area.style.height = 'auto';
+    area.style.height = Math.min(area.scrollHeight + 8, 920) + 'px';
+  }
+  if (area) { area.addEventListener('input', fit); fit(); }
+</script>
+
+{% endblock %}

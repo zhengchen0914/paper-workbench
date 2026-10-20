@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}论文工坊{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="mark">坊</span>论文工坊<span class="tag">M1</span></a>
+    <nav class="nav">
+      <a href="/" class="{{ 'on' if active=='dashboard' else '' }}">看板</a>
+      <a href="/radar" class="{{ 'on' if active=='radar' else '' }}">雷达</a>
+      <a href="/inbox" class="{{ 'on' if active=='inbox' else '' }}">选题池</a>
+      <a href="/library" class="{{ 'on' if active=='library' else '' }}">论文库</a>
+      <a href="/drafts" class="{{ 'on' if active=='drafts' else '' }}">稿件</a>
+      <a href="/settings" class="{{ 'on' if active=='settings' else '' }}">设置</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+{% block body %}{% endblock %}
+</main>
+<footer class="foot">本地运行 · 数据只保存在这台机器</footer>
+</body>
+</html>

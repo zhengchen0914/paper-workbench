@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title or '文章' }} · 终审{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div class="crumb">
+    <a href="/drafts">稿件</a> /
+    {% if reading %}<a href="/draft/{{ reading.uid }}">解读</a> / {% endif %}
+    公众号稿
+  </div>
+  <h1>{{ article.title or '未命名文章' }}</h1>
+  <p class="sub">
+    <span class="pill {{ article.status }}">{{ status_labels.get(article.status, article.status) }}</span>
+    <span class="muted">{{ article.content | length }} 字</span>
+    {% if length_state == 'over' %}
+      <span class="pill failed">超出目标 {{ preset_max }} 字</span>
+    {% elif length_state == 'under' %}
+      <span class="pill running">不足 {{ preset_min }} 字</span>
+    {% endif %}
+    {% if paper %}<span class="muted">{{ paper.filename }}</span>{% endif %}
+    <span class="muted">v{{ article.version }}</span>
+    {% if article.model %}<span class="muted">{{ article.model }}</span>{% endif %}
+    {% if article.engine %}<span class="muted">引擎：{{ engine_labels.get(article.engine, article.engine) }}</span>{% endif %}
+    <span class="muted">类型：{{ preset_name }}</span>
+    <span class="muted">主题：{{ theme.name }}</span>
+  </p>
+</div>
+
+{% if article.error %}<div class="banner warn">{{ article.error }}</div>{% endif %}
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+{% if article.status == 'running' %}
+  {% include "_article_panel.html" %}
+{% endif %}
+
+{% if article.status in ('review', 'approved') %}
+
+<section class="review-grid">
+
+  <div class="card">
+    <div class="card-head">
+      <h2>标题候选</h2>
+      <span class="muted small">点「用这个」替换当前标题</span>
+    </div>
+    {% if meta.titles %}
+      <ul class="title-list">
+      {% for t in meta.titles %}
+        <li class="{{ 'chosen' if t.text == article.title else '' }}">
+          <span class="score">{{ t.score }}</span>
+          <span class="ttext">{{ t.text }}</span>
+          {% if t.angle %}<span class="angle">{{ t.angle }}</span>{% endif %}
+          <form method="post" action="/article/{{ article.uid }}/retitle" class="inline">
+            <input type="hidden" name="title" value="{{ t.text }}">
+            <button class="btn tiny" type="submit">用这个</button>
+          </form>
+        </li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">还没有标题候选。点下方「重新生成物料」。</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>摘要卡片</h2><span class="muted small">公众号摘要栏</span></div>
+    <p class="summary">{{ meta.summary or '（空）' }}</p>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>封面文案</h2></div>
+    <div class="cover-preview">
+      <span class="cover-main">{{ meta.cover.main or '主标题' }}</span>
+      <span class="cover-sub">{{ meta.cover.sub or '副标题' }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>话题标签</h2></div>
+    <p class="tags">
+      {% for tag in meta.tags %}<span class="tag-chip">{{ tag }}</span>{% else %}<span class="muted">（空）</span>{% endfor %}
+    </p>
+  </div>
+
+  {% if trace %}{% include "_trace.html" %}{% endif %}
+
+  <div class="card wide">
+    <div class="card-head">
+      <h2>违禁词检查</h2>
+      <span class="muted small">
+        危险 {{ stats.danger }} · 慎用 {{ stats.caution }}
+      </span>
+    </div>
+    {% if hits %}
+      <table class="table compact">
+        <thead><tr><th>词</th><th>等级</th><th>次数</th><th>上下文</th></tr></thead>
+        <tbody>
+        {% for hit in hits %}
+          <tr>
+            <td><strong>{{ hit.word }}</strong></td>
+            <td><span class="pill {{ 'failed' if hit.level == '危险' else 'running' }}">{{ hit.level }}</span></td>
+            <td class="num-cell">{{ hit.count }}</td>
+            <td class="muted small">{{ hit.contexts | join('　') }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="ok-text">没有命中本地词表。</p>
+    {% endif %}
+  </div>
+
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2>配图</h2>
+    <span class="muted small">正文有 {{ figure_count }} 处图位 · 已抽 {{ assets | length }} 张候选</span>
+  </div>
+  {% if paper %}
+  <div class="actionbar">
+    <form method="post" action="/article/{{ article.uid }}/figures" class="inline">
+      <button class="btn" type="submit">从 PDF 抽取配图</button>
+    </form>
+    <span class="muted small">只抽内嵌位图；矢量图与整页排版图需按页渲染，暂不支持</span>
+  </div>
+  {% else %}
+  <p class="muted small">这篇没有关联 PDF（来自 Markdown 导入），无法自动抽图。</p>
+  {% endif %}
+
+  {% if assets %}
+  <div class="asset-grid">
+    {% for a in assets %}
+    <figure class="asset">
+      <img src="{{ a.url }}" alt="{{ a.caption }}" loading="lazy">
+      <figcaption>{{ a.caption }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="actionbar">
+  <form method="post" action="/article/{{ article.uid }}/approve" class="inline">
+    <button class="btn primary" type="submit"{{ ' disabled' if article.status == 'approved' else '' }}>通过终审</button>
+  </form>
+  {% if article.status == 'approved' %}
+  <form method="post" action="/article/{{ article.uid }}/reopen" class="inline">
+    <button class="btn" type="submit">撤回</button>
+  </form>
+  {% endif %}
+  <a class="btn" href="/article/{{ article.uid }}/export" target="_blank">打开粘贴页</a>
+  <a class="btn" href="/article/{{ article.uid }}/package.zip">下载交付包</a>
+  <a class="btn ghost" href="/article/{{ article.uid }}/export.md">下载 Markdown</a>
+  <a class="btn ghost" href="/draft/{{ article.uid }}">编辑正文</a>
+  <form method="post" action="/article/{{ article.uid }}/repackage" class="inline">
+    <button class="btn ghost" type="submit">重新生成物料</button>
+  </form>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2>排版主题</h2>
+    <span class="muted small">当前：{{ theme.name }} · 导出与预览同步</span>
+  </div>
+  <div class="theme-row">
+    {% for t in themes %}
+    <form method="post" action="/article/{{ article.uid }}/theme" class="inline">
+      <input type="hidden" name="theme" value="{{ t.key }}">
+      <button class="theme-chip {{ 'on' if t.key == theme.key else '' }}" type="submit" title="{{ t.description }}">
+        <span class="dot" style="background: {{ t.swatch }}"></span>{{ t.name }}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2>正文预览</h2>
+    <span class="muted small">就是粘贴进公众号后的样子（内联样式）</span>
+  </div>
+  <div class="paper-frame">{{ themed_preview }}</div>
+</section>
+
+{% else %}
+<section class="empty">
+  <p>{{ '正在生成，稍等…' if article.status == 'running' else '这篇还没有正文。' }}</p>
+  {% if article.status != 'running' %}
+  <p><a class="btn primary" href="/draft/{{ article.parent_uid }}">回到解读，重新生成文章</a></p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,26 @@
+{# 数字溯源面板：把生成稿里的数字逐个回查原始 PDF #}
+<div class="card wide">
+  <div class="card-head">
+    <h2>数字溯源</h2>
+    <span class="muted small">
+      {{ trace.matched }} / {{ trace.total }} 个数字在原文找到
+      {% if trace.unmatched %}· <strong style="color:var(--bad)">{{ trace.unmatched }} 个待核</strong>{% endif %}
+    </span>
+  </div>
+  {% if trace.unmatched %}
+    <p class="muted small">下面这些数字在原始 PDF 文本里没有匹配到，可能是四舍五入之外的差异，请对着原文核对：</p>
+    <table class="table compact">
+      <thead><tr><th>数字</th><th>上下文</th></tr></thead>
+      <tbody>
+      {% for item in trace.details %}
+        <tr>
+          <td><strong>{{ item.number }}</strong></td>
+          <td class="muted small">…{{ item.context }}…</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="ok-text">全部数字都能在原文中找到（含百分号与四舍五入归一化）。</p>
+  {% endif %}
+</div>

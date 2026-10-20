@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}稿件 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>稿件</h1>
+  <p class="sub">
+    <a class="tab {{ 'on' if kind != 'article' else '' }}" href="/drafts">论文解读</a>
+    <a class="tab {{ 'on' if kind == 'article' else '' }}" href="/drafts?kind=article">公众号文章</a>
+  </p>
+</div>
+
+{% if drafts %}
+<table class="table">
+  <thead><tr><th>标题</th><th>状态</th><th>字数</th><th>引擎</th><th>更新时间</th><th></th></tr></thead>
+  <tbody>
+  {% for d in drafts %}
+    <tr>
+      <td class="title-cell">{{ d.title or '未命名' }}</td>
+      <td><span class="pill {{ d.status }}">{{ status_labels.get(d.status, d.status) }}</span></td>
+      <td class="num-cell">{{ d.content | length }}</td>
+      <td class="muted">{{ engine_labels.get(d.engine, d.engine) }}</td>
+      <td class="muted">{{ d.updated_at }}</td>
+      <td>
+        {% if d.kind == 'article' %}
+          <a class="btn tiny" href="/article/{{ d.uid }}">终审</a>
+          <a class="btn tiny ghost" href="/draft/{{ d.uid }}">编辑</a>
+        {% else %}
+          <a class="btn tiny" href="/draft/{{ d.uid }}">打开</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">
+  {% if kind == 'article' %}还没有公众号文章。打开一篇已完成的解读，点「生成公众号文章」。
+  {% else %}还没有稿件。去 <a href="/library">论文库</a> 生成第一篇。{% endif %}
+</p>
+{% endif %}
+
+{% endblock %}

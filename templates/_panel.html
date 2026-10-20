@@ -1,0 +1,11 @@
+<div id="live-panel" class="panel-live"
+     hx-get="/draft/{{ draft.uid }}/panel"
+     hx-trigger="every 2000ms"
+     hx-swap="outerHTML">
+  <div class="live-head">
+    <span class="pulse"></span>
+    <strong>{{ job.message if job else '生成中…' }}</strong>
+    <span class="muted small">{{ draft.content | length }} 字</span>
+  </div>
+  <article class="prose live-preview">{{ preview }}</article>
+</div>

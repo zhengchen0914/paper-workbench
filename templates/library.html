@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}论文库 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>论文库</h1>
+  <p class="sub">共 {{ papers | length }} 篇 · 从本地目录登记或直接上传</p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<section class="toolbar">
+  <form method="post" action="/library/scan" class="row">
+    <label>扫描目录
+      <input type="text" name="directory" value="{{ scan_dir }}" class="wide">
+    </label>
+    <button class="btn primary" type="submit">扫描 PDF</button>
+  </form>
+
+  <form method="post" action="/library/upload" enctype="multipart/form-data" class="row">
+    <label>上传 PDF
+      <input type="file" name="file" accept="application/pdf">
+    </label>
+    <button class="btn" type="submit">上传</button>
+  </form>
+
+  <form method="post" action="/library/import-notes" class="row">
+    <label>导入既有解读
+      <input type="text" name="directory" value="{{ notes_dir }}" class="wide">
+    </label>
+    <button class="btn" type="submit">导入 .md</button>
+  </form>
+</section>
+
+<section class="block">
+  <div class="block-head"><h2>论文</h2></div>
+  {% if papers %}
+  <table class="table">
+    <thead>
+      <tr><th>文件</th><th>页数</th><th>字数</th><th>解读状态</th><th>操作</th></tr>
+    </thead>
+    <tbody>
+    {% for p in papers %}
+      <tr>
+        <td class="title-cell"><span title="{{ p.path }}">{{ p.filename }}</span></td>
+        <td class="num-cell">{{ p.pages or '—' }}</td>
+        <td class="num-cell">{{ p.char_count or '—' }}</td>
+        <td>
+          {% if p.draft_uid %}
+            <span class="pill {{ p.draft_status }}">{{ status_labels.get(p.draft_status, p.draft_status) }}</span>
+            {% if p.draft_status == 'ready' %}<span class="muted small">{{ p.word_count }} 字</span>{% endif %}
+          {% else %}
+            <span class="muted">未建档</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.draft_uid %}
+            <a class="btn tiny" href="/draft/{{ p.draft_uid }}">打开解读</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">还没有论文。点上面「扫描 PDF」从 <code>{{ scan_dir }}</code> 登记，或直接上传。</p>
+  {% endif %}
+</section>
+
+{% if orphans %}
+<section class="block">
+  <div class="block-head"><h2>从 Markdown 导入的解读</h2><span class="muted small">没有对应 PDF 记录</span></div>
+  <table class="table">
+    <thead><tr><th>标题</th><th>字数</th><th>更新时间</th></tr></thead>
+    <tbody>
+    {% for d in orphans %}
+      <tr>
+        <td class="title-cell"><a href="/draft/{{ d.uid }}">{{ d.title }}</a></td>
+        <td class="num-cell">{{ d.content | length }}</td>
+        <td class="muted">{{ d.updated_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% endblock %}

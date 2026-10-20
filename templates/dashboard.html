@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}看板 · 论文工坊{% endblock %}
+{% block body %}
+
+<section class="hero">
+  <h1>从论文到文章</h1>
+  <p class="lede">导入 PDF，生成结构化解读，再改写成可直接发布的公众号稿。中间全自动，你只管选题和终审。</p>
+</section>
+
+{% if not configured %}
+<div class="banner warn">
+  <strong>还没有配置模型</strong>
+  <a href="/settings">去设置页填写接口地址与 API Key</a>，之后就能一键生成解读。
+</div>
+{% endif %}
+
+<section class="stats">
+  <div class="stat"><span class="num">{{ counts.papers }}</span><span class="cap">论文</span></div>
+  <div class="stat"><span class="num">{{ counts.reading }}</span><span class="cap">已完成的解读</span></div>
+  <div class="stat {{ 'alert' if counts.review else '' }}"><span class="num">{{ counts.review }}</span><span class="cap">待终审文章</span></div>
+  <div class="stat"><span class="num">{{ counts.running }}</span><span class="cap">进行中的作业</span></div>
+  <div class="stat {{ 'alert' if counts.failed else '' }}"><span class="num">{{ counts.failed }}</span><span class="cap">失败待处理</span></div>
+</section>
+
+<section class="actions">
+  <form method="post" action="/library/scan" class="inline">
+    <input type="hidden" name="directory" value="">
+    <button class="btn primary" type="submit">扫描「已完成」目录</button>
+  </form>
+  <form method="post" action="/library/import-notes" class="inline">
+    <input type="hidden" name="directory" value="">
+    <button class="btn" type="submit">导入既有解读</button>
+  </form>
+  <a class="btn" href="/inbox">去选题池</a>
+  <a class="btn ghost" href="/library">上传新论文</a>
+</section>
+
+{% if recent %}
+<section class="block">
+  <div class="block-head"><h2>最近活动</h2><a class="more" href="/drafts">全部稿件 →</a></div>
+  <table class="table">
+    <thead><tr><th>稿件</th><th>状态</th><th>字数</th><th>更新时间</th></tr></thead>
+    <tbody>
+    {% for item in recent %}
+      <tr>
+        <td class="title-cell"><a href="/draft/{{ item.uid }}">{{ item.title or item.filename or '未命名' }}</a></td>
+        <td><span class="pill {{ item.status }}">{{ status_labels.get(item.status, item.status) }}</span></td>
+        <td class="num-cell">{{ item.content | length }}</td>
+        <td class="muted">{{ item.updated_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="empty">
+  <p>工作台还是空的。先做一件事：</p>
+  <p class="big">扫描「已完成」目录，或上传一篇 PDF。</p>
+</section>
+{% endif %}
+
+{% endblock %}
