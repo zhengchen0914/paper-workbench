@@ -14,6 +14,7 @@ import re
 import shutil
 import zipfile
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -880,15 +881,91 @@ def board_snapshot(key: str) -> list[dict[str, Any]]:
     return rows
 
 
+WEEK_DAYS = 7
+
+
+def weekly_baseline(board_key: str, days: int = WEEK_DAYS) -> tuple[dict[str, int], str]:
+    """取「days 天前」的星数基线。
+
+    返回 (基线表, 口径)。口径：
+    - week   有超过 days 天的历史快照，算的是真实周涨幅
+    - last   历史不足，退化为「相对上次刷新」
+    - none   没有任何历史
+    """
+    cutoff = (datetime.now().astimezone().date() - timedelta(days=days)).isoformat()
+    rows = db.query(
+        "SELECT full_name, stars FROM board_history WHERE board_key=? AND captured_date<=? "
+        "ORDER BY captured_date DESC",
+        (board_key, cutoff),
+    )
+    baseline: dict[str, int] = {}
+    for row in rows:
+        baseline.setdefault(row["full_name"], int(row["stars"]))
+    if baseline:
+        return baseline, "week"
+
+    total = db.one("SELECT COUNT(*) AS n FROM board_history WHERE board_key=?", (board_key,))
+    return {}, ("last" if (total and total["n"]) else "none")
+
+
+def weekly_entries(board_key: str) -> tuple[list[dict[str, Any]], str]:
+    """本周涨星榜：按涨幅降序。没有周基线时退化为相对上次刷新。"""
+    entries = board_snapshot(board_key)
+    baseline, basis = weekly_baseline(board_key)
+
+    for row in entries:
+        if basis == "week":
+            if row["full_name"] in baseline:
+                row["week_delta"] = int(row["stars"]) - baseline[row["full_name"]]
+                row["is_new"] = False
+            else:
+                row["week_delta"] = 0
+                row["is_new"] = True
+        elif basis == "last":
+            row["week_delta"] = row["delta"]
+            row["is_new"] = False
+        else:
+            row["week_delta"] = 0
+            row["is_new"] = False
+
+    entries.sort(key=lambda item: (-int(item["week_delta"]), int(item["rank"])))
+    for index, row in enumerate(entries, start=1):
+        row["weekly_rank"] = index
+    return entries, basis
+
+
+BASIS_LABELS = {
+    "week": "相对 7 天前快照（真实周涨幅）",
+    "last": "历史不足 7 天，暂用「相对上次刷新」的口径",
+    "none": "尚无快照历史，先点一次刷新",
+}
+
+
 @app.get("/boards", response_class=HTMLResponse)
-def boards_page(request: Request, board: str = "", msg: str = "") -> HTMLResponse:
+def boards_page(
+    request: Request, board: str = "", view: str = "total", msg: str = ""
+) -> HTMLResponse:
     boards = db.query("SELECT * FROM boards WHERE enabled=1 ORDER BY rowid")
     current = None
     entries: list[dict[str, Any]] = []
+    weekly: list[dict[str, Any]] = []
+    basis = "none"
     if boards:
         current = next((item for item in boards if item["key"] == board), boards[0])
         entries = board_snapshot(current["key"])
+        weekly, basis = weekly_entries(current["key"])
     token = bool(db.get_settings().get("github_token"))
+    week_cutoff = (
+        datetime.now().astimezone().date() - timedelta(days=WEEK_DAYS)
+    ).isoformat()
+    papers_week = db.query(
+        "SELECT * FROM candidates WHERE status!='imported' AND published>=? "
+        "ORDER BY score DESC, published DESC LIMIT 10",
+        (week_cutoff,),
+    )
+    has_gains = any(
+        (row.get("week_delta") or 0) > 0 or row.get("is_new") for row in weekly
+    )
     return render(
         request,
         "boards.html",
@@ -896,6 +973,13 @@ def boards_page(request: Request, board: str = "", msg: str = "") -> HTMLRespons
         boards=boards,
         current=current,
         entries=entries,
+        weekly=weekly,
+        basis=basis,
+        basis_label=BASIS_LABELS.get(basis, ""),
+        has_gains=has_gains,
+        view=("weekly" if view == "weekly" else "total"),
+        papers_week=papers_week,
+        week_cutoff=week_cutoff,
         has_token=token,
         msg=msg,
     )
@@ -928,6 +1012,7 @@ def boards_refresh(key: str):
         return RedirectResponse(f"/boards?board={key}&msg=抓取失败：{exc}", status_code=303)
 
     db.execute("DELETE FROM board_entries WHERE board_key=?", (key,))
+    today = datetime.now().astimezone().date().isoformat()
     for rank, item in enumerate(result.items, start=1):
         db.execute(
             "INSERT INTO board_entries(uid, board_key, rank, full_name, url, stars, "
@@ -946,6 +1031,21 @@ def boards_refresh(key: str):
                 item["description"],
                 item["topics"],
                 item["pushed_at"],
+                result.fetched_at,
+            ),
+        )
+        # 同日重复刷新只保留最后一次，避免同一天多条快照把周涨幅算歪
+        db.execute(
+            "INSERT INTO board_history(uid, board_key, full_name, stars, captured_date, "
+            "captured_at) VALUES(?,?,?,?,?,?) "
+            "ON CONFLICT(board_key, full_name, captured_date) DO UPDATE SET "
+            "stars=excluded.stars, captured_at=excluded.captured_at",
+            (
+                db.new_uid("hist"),
+                key,
+                item["full_name"],
+                item["stars"],
+                today,
                 result.fetched_at,
             ),
         )
@@ -1086,6 +1186,41 @@ def boards_roundup(key: str, repos: list[str] = Form(default=[])):
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
         return RedirectResponse(f"/boards?board={key}&msg=创建失败：{message}", status_code=303)
+    return RedirectResponse(f"/article/{article_uid}", status_code=303)
+
+
+@app.post("/boards/{key}/weekly")
+def boards_weekly(
+    key: str,
+    repos: list[str] = Form(default=[]),
+    papers: list[str] = Form(default=[]),
+):
+    """本周涨星 + 本周新论文 → 周资讯文章。"""
+    board = db.one("SELECT * FROM boards WHERE key=?", (key,))
+    if board is None:
+        return RedirectResponse("/boards?msg=榜单不存在", status_code=303)
+    if not repos and not papers:
+        return RedirectResponse(
+            f"/boards?board={key}&view=weekly&msg=至少勾一项素材", status_code=303
+        )
+
+    weekly_rows, _ = weekly_entries(key)
+    picked_github = [row for row in weekly_rows if row["full_name"] in set(repos)]
+    picked_papers: list[dict[str, Any]] = []
+    if papers:
+        wanted = set(papers)
+        picked_papers = [
+            row
+            for row in db.query("SELECT * FROM candidates ORDER BY score DESC")
+            if row["uid"] in wanted
+        ]
+    try:
+        article_uid = jobs.start_weekly(board, picked_github, picked_papers)
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        return RedirectResponse(
+            f"/boards?board={key}&view=weekly&msg=创建失败：{message}", status_code=303
+        )
     return RedirectResponse(f"/article/{article_uid}", status_code=303)
 
 

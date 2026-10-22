@@ -65,6 +65,14 @@ def _worker_loop() -> None:
                 )
             elif kind == "roundup":
                 _run_roundup(job_uid, payload["article_uid"], payload["board"], payload["repos"])
+            elif kind == "weekly":
+                _run_weekly(
+                    job_uid,
+                    payload["article_uid"],
+                    payload["board"],
+                    payload["github"],
+                    payload["papers"],
+                )
         except Exception as exc:  # 兜底：worker 不能因为单个作业死掉
             _set_job(job_uid, "failed", str(exc) or exc.__class__.__name__)
         finally:
@@ -436,6 +444,135 @@ def start_roundup(
     return article_uid
 
 
+def start_weekly(
+    board: dict[str, Any],
+    github_items: list[dict[str, Any]],
+    paper_items: list[dict[str, Any]],
+) -> str:
+    """本周涨星 + 本周新论文 → 周资讯文章。返回 article draft uid。"""
+    if not github_items and not paper_items:
+        raise ValueError("本周没有可用素材（先刷新榜单或抓取雷达）")
+
+    article_uid = db.new_uid("article")
+    timestamp = db.now()
+    title = f"{board['name']}｜本周资讯"
+    db.execute(
+        "INSERT INTO drafts(uid, paper_uid, kind, title, status, engine, preset, "
+        "parent_uid, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (article_uid, "", "article", title, "queued", "builtin", "weekly", "", timestamp, timestamp),
+    )
+    job_uid = db.new_uid("job")
+    db.execute(
+        "INSERT INTO jobs(uid, kind, paper_uid, draft_uid, status, message, created_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (job_uid, "weekly", "", article_uid, "queued", "排队中", timestamp),
+    )
+    db.log_event(
+        article_uid, "weekly:queued", f"{len(github_items)} 个仓库 / {len(paper_items)} 篇论文"
+    )
+
+    with _LOCK:
+        _RUNNING.add(article_uid)
+    _ensure_worker()
+    _QUEUE.put(
+        (
+            "weekly",
+            job_uid,
+            {
+                "article_uid": article_uid,
+                "board": {
+                    "key": board["key"],
+                    "name": board["name"],
+                    "query": board.get("query", ""),
+                },
+                "github": github_items,
+                "papers": paper_items,
+            },
+        )
+    )
+    return article_uid
+
+
+def _run_weekly(
+    job_uid: str,
+    article_uid: str,
+    board: dict[str, Any],
+    github_items: list[dict[str, Any]],
+    paper_items: list[dict[str, Any]],
+) -> None:
+    try:
+        messages = prompts.build_weekly_messages(
+            board["name"], github_items, paper_items, board_query=board.get("query", "")
+        )
+        _run_generated(
+            job_uid,
+            article_uid,
+            messages,
+            fallback_title=f"{board['name']}｜本周资讯",
+            log_tag="weekly",
+        )
+    except Exception as exc:
+        _fail(job_uid, article_uid, exc, "weekly")
+    finally:
+        with _LOCK:
+            _RUNNING.discard(article_uid)
+
+
+def _run_generated(
+    job_uid: str,
+    article_uid: str,
+    messages: list[dict[str, str]],
+    *,
+    fallback_title: str,
+    log_tag: str,
+) -> None:
+    """正文流式生成 + 发布物料。盘点与周资讯共用这条路径。"""
+    db.execute(
+        "UPDATE drafts SET status='running', updated_at=? WHERE uid=?",
+        (db.now(), article_uid),
+    )
+    settings = db.get_settings()
+    config = llm.config_from_settings(settings)
+    _set_job(job_uid, "running", "正在生成正文…")
+
+    buffer: list[str] = []
+    state = {"flushed": 0}
+
+    def on_delta(chunk: str) -> None:
+        buffer.append(chunk)
+        total = sum(len(part) for part in buffer)
+        if total - state["flushed"] >= 400:
+            state["flushed"] = total
+            _write_partial(article_uid, "".join(buffer), total, job_uid)
+
+    body = llm.chat_stream(config, messages, on_delta=on_delta)
+    title = _title_from_markdown(body) or fallback_title
+    db.execute(
+        "UPDATE drafts SET content=?, title=?, model=?, version=version+1, "
+        "error='', updated_at=? WHERE uid=?",
+        (body, title, config.model, db.now(), article_uid),
+    )
+    _set_job(job_uid, "running", f"正文完成 {len(body)} 字，正在生成发布物料…")
+
+    meta, warning = _build_package(config, body, title)
+    db.execute(
+        "UPDATE drafts SET meta_json=?, status=?, error=?, updated_at=? WHERE uid=?",
+        (json.dumps(meta, ensure_ascii=False), "review", warning, db.now(), article_uid),
+    )
+    _set_job(job_uid, "done", f"完成：{len(body)} 字，标题候选 {len(meta['titles'])} 个")
+    db.log_event(article_uid, f"{log_tag}:done", f"{len(body)} 字")
+
+
+def _fail(job_uid: str, article_uid: str, exc: Exception, log_tag: str) -> None:
+    message = str(exc) or exc.__class__.__name__
+    db.execute(
+        "UPDATE drafts SET status=?, error=?, updated_at=? WHERE uid=?",
+        ("failed", message, db.now(), article_uid),
+    )
+    _set_job(job_uid, "failed", message)
+    db.log_event(article_uid, f"{log_tag}:failed", message)
+
+
 def _run_roundup(
     job_uid: str,
     article_uid: str,
@@ -443,55 +580,21 @@ def _run_roundup(
     repos: list[dict[str, Any]],
 ) -> None:
     try:
-        db.execute(
-            "UPDATE drafts SET status='running', updated_at=? WHERE uid=?",
-            (db.now(), article_uid),
-        )
-        settings = db.get_settings()
-        config = llm.config_from_settings(settings)
         messages = prompts.build_roundup_messages(
             board["name"],
             repos,
             board_query=board.get("query", ""),
             note=board.get("note", ""),
         )
-        _set_job(job_uid, "running", f"正在写盘点（{len(repos)} 个项目）…")
-
-        buffer: list[str] = []
-        state = {"flushed": 0}
-
-        def on_delta(chunk: str) -> None:
-            buffer.append(chunk)
-            total = sum(len(part) for part in buffer)
-            if total - state["flushed"] >= 400:
-                state["flushed"] = total
-                _write_partial(article_uid, "".join(buffer), total, job_uid)
-
-        body = llm.chat_stream(config, messages, on_delta=on_delta)
-        title = _title_from_markdown(body) or f"{board['name']} 盘点"
-        db.execute(
-            "UPDATE drafts SET content=?, title=?, model=?, version=version+1, "
-            "error='', updated_at=? WHERE uid=?",
-            (body, title, config.model, db.now(), article_uid),
+        _run_generated(
+            job_uid,
+            article_uid,
+            messages,
+            fallback_title=f"{board['name']} 盘点",
+            log_tag="roundup",
         )
-        _set_job(job_uid, "running", f"正文完成 {len(body)} 字，正在生成发布物料…")
-
-        meta, warning = _build_package(config, body, title)
-        db.execute(
-            "UPDATE drafts SET meta_json=?, status=?, error=?, updated_at=? WHERE uid=?",
-            (json.dumps(meta, ensure_ascii=False), "review", warning, db.now(), article_uid),
-        )
-        _set_job(job_uid, "done", f"完成：{len(body)} 字，标题候选 {len(meta['titles'])} 个")
-        db.log_event(article_uid, "roundup:done", f"{len(body)} 字")
-
     except Exception as exc:
-        message = str(exc) or exc.__class__.__name__
-        db.execute(
-            "UPDATE drafts SET status=?, error=?, updated_at=? WHERE uid=?",
-            ("failed", message, db.now(), article_uid),
-        )
-        _set_job(job_uid, "failed", message)
-        db.log_event(article_uid, "roundup:failed", message)
+        _fail(job_uid, article_uid, exc, "roundup")
     finally:
         with _LOCK:
             _RUNNING.discard(article_uid)

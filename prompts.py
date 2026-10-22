@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 
 READING_SYSTEM = """你是一位严谨的计算机视觉论文精读专家，为中文读者撰写「论文解读」。
@@ -374,8 +375,7 @@ ARTICLE_PRESETS: dict[str, dict[str, str]] = {
     },
     "roundup": {
         "name": "榜单盘点",
-        "hint": "开源项目排行榜 → 盘点文章，适合周期性内容",
-        "words": "全文 1500–2500 字。项目介绍每条约 60–100 字，不要逐个长篇展开。",
+        "hint": "开源项目排行榜 → 盘点文章，适合周期性内容","words": "全文 1500–2500 字。项目介绍每条约 60–100 字，不要逐个长篇展开。",
         "min": 1500,
         "max": 2500,
         "budget": (
@@ -413,6 +413,54 @@ ARTICLE_PRESETS: dict[str, dict[str, str]] = {
 - 榜单地址：…
 
 👇 欢迎点赞、在看、转发，关注我们，持续分享开源生态观察
+
+**公众号文末标签：**
+`#标签` `#标签`
+```""",
+    },
+    "weekly": {
+        "name": "周资讯",
+        "hint": "本周涨星 + 本周新论文，周期性更新",
+        "words": "全文 1500–2500 字。每条资讯 80–150 字，不要逐条展开成小论文。",
+        "min": 1500,
+        "max": 2500,
+        "budget": (
+            "- 摘要卡片：≤140 字\n"
+            "- 01 本周概览：≤250 字\n"
+            "- 02 开源动态：每条 ≤80 字\n"
+            "- 03 论文速递：每条 ≤120 字\n"
+            "- 04 值得跟进的一件事：≤400 字\n"
+            "- 05 下周关注：≤200 字"
+        ),
+        "structure": """```
+# 文章标题（周报风格，不超过 30 字，可含日期）
+
+> 💡摘要卡片（公众号摘要栏直接复制）
+> 100–140 字。一句话说清本周最大的变化。
+
+---
+
+**🔖封面文案参考**
+> 【主标题大字】8–14 字
+> 【副标题小字】10–18 字
+> 【封面标签】#标签1 #标签2 #标签3
+
+---
+
+## 01 本周概览
+（三句话说清：涨得最猛的是什么、最值得读的论文是哪篇、整体在往哪走）
+## 02 开源动态：本周涨星
+（逐条：项目名 + 本周涨了多少 + 一句话它解决什么）
+## 03 论文速递
+（逐条：论文名 + 一句话贡献 + 为什么值得看）
+## 04 值得跟进的一件事
+（从上面挑一个，讲清为什么它可能改变做法）
+## 05 下周关注
+
+🔗 相关链接
+- 榜单地址：…
+
+👇 欢迎点赞、在看、转发，关注我们，每周一更新
 
 **公众号文末标签：**
 `#标签` `#标签`
@@ -539,6 +587,86 @@ def build_roundup_messages(
         "## 榜单信息\n" + "\n".join(lines) + "\n\n"
         "## 项目列表（排名 / 仓库 / Star / 语言 / 最近更新 / 一句话描述）\n"
         + "\n".join(rows)
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+WEEKLY_OVERRIDE = (
+    "（本次任务类型：**本周资讯周报**，素材是「本周 GitHub 涨星项目」与「本周新发布论文」。"
+    "只依据下面给出的事实写作：涨星数、论文标题、发布时间、摘要要点。"
+    "不要编造没有提供的数字、融资、公司动态或榜单名次。）"
+)
+
+
+def build_weekly_messages(
+    board_name: str,
+    github_items: list[dict[str, Any]],
+    paper_items: list[dict[str, Any]],
+    *,
+    board_query: str = "",
+) -> list[dict[str, str]]:
+    """本周涨星 + 本周新论文 → 周资讯。"""
+    preset_key, preset_def = get_preset("weekly")
+    system = ARTICLE_SYSTEM.replace("{{STRUCTURE}}", preset_def["structure"])
+    length_block = (
+        "## 篇幅（硬约束）\n\n"
+        f"{preset_def['words']}\n"
+        f"目标区间 {preset_def['min']}–{preset_def['max']} 字。"
+        f"超过 {preset_def['max']} 字视为不合格：每条资讯砍到一句话也要保留全部条目。\n\n"
+        "各节字数上限：\n" + preset_def.get("budget", "")
+    )
+    system = system.replace("{{LENGTH}}", length_block)
+    system = WEEKLY_OVERRIDE + "\n\n" + system
+
+    today = datetime.now().astimezone().date()
+    period = f"{(today - timedelta(days=7)).isoformat()} ~ {today.isoformat()}"
+    lines = [
+        f"本周区间：{period}",
+        f"今天是：{today.isoformat()}（标题或正文里出现的日期只能来自这个区间，不得虚构）",
+        f"榜单来源：{board_name}（GitHub）",
+    ]
+    if board_query:
+        lines.append(f"检索式：{board_query}")
+
+    gh_rows = []
+    for index, repo in enumerate(github_items, 1):
+        gain = repo.get("week_delta")
+        gain_text = f"本周 +{gain} star" if gain else "本周涨幅未计（新进榜或历史不足）"
+        parts = [
+            f"{index}. {repo['full_name']}",
+            f"总 {repo['stars']} star",
+            gain_text,
+        ]
+        if repo.get("language"):
+            parts.append(str(repo["language"]))
+        desc = (repo.get("description") or "").strip()
+        if desc:
+            parts.append(desc[:140])
+        gh_rows.append(" | ".join(parts))
+
+    paper_rows = []
+    for index, paper in enumerate(paper_items, 1):
+        parts = [
+            f"{index}. {paper.get('title', '')}",
+            f"发布 {paper.get('published', '')}",
+        ]
+        if paper.get("keyword"):
+            parts.append(f"命中关键词 {paper['keyword']}")
+        abstract = (paper.get("abstract") or "").strip()
+        if abstract:
+            parts.append(abstract[:220])
+        paper_rows.append(" | ".join(parts))
+
+    user = (
+        "根据下面的本周素材写一篇周资讯。\n\n"
+        "## 素材来源\n" + "\n".join(lines) + "\n\n"
+        "## 本周涨星项目（排名 / 仓库 / 总 star / 本周涨幅 / 语言 / 描述）\n"
+        + ("\n".join(gh_rows) if gh_rows else "（本周没有可用的榜单数据）")
+        + "\n\n## 本周新论文（标题 / 发布时间 / 关键词 / 摘要）\n"
+        + ("\n".join(paper_rows) if paper_rows else "（本周没有新增论文候选）")
     )
     return [
         {"role": "system", "content": system},

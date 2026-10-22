@@ -361,7 +361,47 @@ def test_roundup_messages_include_board_and_repos():
     )
     system, user = messages[0]["content"], messages[1]["content"]
     assert "开源项目榜单盘点" in system
-    assert "榜单盘点" not in system or True  # 结构名称不强制
     assert "榜单名称：工业异常检测" in user
     assert "1. a/b | ★1200 | Python" in user
     assert "2. c/d | ★300 | Rust" in user
+
+
+# ---------------------------------------------------------------- 周资讯
+
+
+def test_weekly_messages_include_gains_and_papers():
+    github = [
+        {"full_name": "a/b", "stars": 1000, "week_delta": 25,
+         "language": "Python", "description": "涨得不错"},
+    ]
+    papers = [
+        {"title": "Paper X", "published": "2026-10-20",
+         "keyword": "anomaly detection", "abstract": "摘要正文"},
+    ]
+    messages = prompts.build_weekly_messages("AI 开源总榜", github, papers, board_query="topic:ai")
+    system, user = messages[0]["content"], messages[1]["content"]
+    assert "本周资讯周报" in system
+    assert "榜单来源：AI 开源总榜" in user
+    assert "本周 +25 star" in user
+    assert "Paper X" in user
+    assert "发布 2026-10-20" in user
+
+
+def test_weekly_messages_mark_missing_gain():
+    github = [{"full_name": "x/y", "stars": 10, "week_delta": 0, "language": "", "description": ""}]
+    user = prompts.build_weekly_messages("B", github, [])[1]["content"]
+    assert "本周涨幅未计" in user
+
+
+def test_weekly_messages_handle_empty_material():
+    user = prompts.build_weekly_messages("B", [], [])[1]["content"]
+    assert "（本周没有可用的榜单数据）" in user
+    assert "（本周没有新增论文候选）" in user
+
+
+def test_weekly_preset_structure():
+    key, preset = prompts.get_preset("weekly")
+    assert key == "weekly"
+    assert "## 01 本周概览" in preset["structure"]
+    assert "## 02 开源动态：本周涨星" in preset["structure"]
+    assert preset["min"] < preset["max"]

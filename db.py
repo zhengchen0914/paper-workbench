@@ -152,6 +152,21 @@ CREATE TABLE IF NOT EXISTS board_entries (
     fetched_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_board_entries ON board_entries(board_key, rank);
+
+-- 快照历史：每次刷新追加一行（按日去重），周涨幅靠它算。
+-- board_entries 只存"当前"，没有历史就算不出「本周涨了多少」。
+CREATE TABLE IF NOT EXISTS board_history (
+    uid           TEXT PRIMARY KEY,
+    board_key     TEXT NOT NULL,
+    full_name     TEXT NOT NULL,
+    stars         INTEGER NOT NULL DEFAULT 0,
+    captured_date TEXT NOT NULL,
+    captured_at   TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_board_history
+    ON board_history(board_key, full_name, captured_date);
+CREATE INDEX IF NOT EXISTS idx_board_history_lookup
+    ON board_history(board_key, captured_date);
 """
 
 DEFAULT_SETTINGS: dict[str, str] = {
