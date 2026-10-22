@@ -10,7 +10,7 @@
 <body>
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="/"><span class="mark">坊</span>论文工坊<span class="tag">M1</span></a>
+    <a class="brand" href="/"><span class="mark">坊</span>论文工坊<span class="tag">v{{ version }}</span></a>
     <nav class="nav">
       <a href="/" class="{{ 'on' if active=='dashboard' else '' }}">看板</a>
       <a href="/radar" class="{{ 'on' if active=='radar' else '' }}">雷达</a>
@@ -25,6 +25,6 @@
 <main class="wrap">
 {% block body %}{% endblock %}
 </main>
-<footer class="foot">本地运行 · 数据只保存在这台机器</footer>
+<footer class="foot">本地运行 · 数据只保存在这台机器 · v{{ version }}</footer>
 </body>
 </html>

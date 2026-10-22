@@ -38,6 +38,7 @@ import prompts
 import radar
 import themes
 import verify
+import version
 
 WORKBENCH_DIR = Path(__file__).resolve().parent
 WORKSPACE_DIR = WORKBENCH_DIR.parent
@@ -85,7 +86,11 @@ def trace_for(content: str, paper: dict[str, Any] | None) -> dict[str, Any] | No
 
 
 def render(request: Request, name: str, **context: Any) -> HTMLResponse:
-    base = {"status_labels": STATUS_LABELS, "engine_labels": ENGINE_LABELS}
+    base = {
+        "status_labels": STATUS_LABELS,
+        "engine_labels": ENGINE_LABELS,
+        "version": version.__version__,
+    }
     base.update(context)
     return templates.TemplateResponse(request, name, base)
 
