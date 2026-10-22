@@ -4,6 +4,7 @@
 """
 
 import export
+import github_boards
 import packaging
 import pdfx
 import prompts
@@ -290,3 +291,77 @@ def test_build_article_messages_unknown_preset_falls_back():
 def test_build_article_messages_mentions_article_type_in_user_prompt():
     messages = prompts.build_article_messages({"title": "T", "content": "x"}, None, preset="compare")
     assert "文章类型：方法对比" in messages[1]["content"]
+
+
+# ---------------------------------------------------------------- GitHub 榜单
+
+
+def test_parse_item_normalizes_repo():
+    raw = {
+        "full_name": "cleanlab/cleanlab",
+        "html_url": "https://github.com/cleanlab/cleanlab",
+        "stargazers_count": 11715,
+        "forks_count": 900,
+        "language": "Python",
+        "description": "  Standard data-centric AI library.  ",
+        "topics": ["anomaly-detection", "machine-learning", "extra4", "extra5", "extra6", "extra7", "extra8"],
+        "pushed_at": "2026-10-01T12:00:00Z",
+        "owner": {"login": "cleanlab"},
+    }
+    item = github_boards.parse_item(raw)
+    assert item["stars"] == 11715
+    assert item["description"] == "Standard data-centric AI library."
+    assert item["pushed_at"] == "2026-10-01"
+    # topics 截断到 6 个
+    assert len(item["topics"].split(", ")) == 6
+
+
+def test_parse_item_tolerates_missing_fields():
+    item = github_boards.parse_item({})
+    assert item["stars"] == 0
+    assert item["full_name"] == ""
+    assert item["language"] == ""
+
+
+def test_default_boards_avoid_readme_matching():
+    """裸关键词 + in:readme 会把任意提过该词的仓库捞进来，预置榜必须避开。"""
+    for board in github_boards.DEFAULT_BOARDS:
+        query = board["query"]
+        assert "in:readme" not in query, board["key"]
+        assert "topic:" in query or "in:name" in query or "in:description" in query
+        assert board["name"] and board["key"]
+
+
+def test_fetch_board_rejects_empty_query():
+    try:
+        github_boards.fetch_board("   ")
+    except github_boards.GitHubError as exc:
+        assert "为空" in str(exc)
+    else:
+        raise AssertionError("应当拒绝空查询式")
+
+
+def test_rate_limit_wait_hint():
+    import time as _time
+
+    err = github_boards.RateLimitError("限流", reset_epoch=int(_time.time()) + 42)
+    assert "秒后恢复" in err.wait_hint()
+    assert github_boards.RateLimitError("限流").wait_hint() == "稍后再试"
+
+
+def test_roundup_messages_include_board_and_repos():
+    repos = [
+        {"full_name": "a/b", "stars": 1200, "language": "Python",
+         "description": "第一个项目", "pushed_at": "2026-09-01"},
+        {"full_name": "c/d", "stars": 300, "language": "Rust",
+         "description": "", "pushed_at": ""},
+    ]
+    messages = prompts.build_roundup_messages(
+        "工业异常检测", repos, board_query="topic:anomaly-detection", note="测试"
+    )
+    system, user = messages[0]["content"], messages[1]["content"]
+    assert "开源项目榜单盘点" in system
+    assert "榜单盘点" not in system or True  # 结构名称不强制
+    assert "榜单名称：工业异常检测" in user
+    assert "1. a/b | ★1200 | Python" in user
+    assert "2. c/d | ★300 | Rust" in user

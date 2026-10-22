@@ -61,6 +61,18 @@
     <p class="hint">抓取走 arXiv 官方 API，关键词越多耗时越长（请求之间留 1 秒间隔）。</p>
   </fieldset>
 
+  <fieldset>
+    <legend>GitHub 榜单</legend>
+    <label>Personal Access Token（可选，只读公共仓库即可）
+      <input type="password" name="github_token" value=""
+             placeholder="{% if settings.github_token %}已配置，留空不修改{% else %}ghp_… 不填也能用，但限流更严{% endif %}">
+    </label>
+    <p class="hint">
+      不填：搜索 10 次/分钟；填了：30 次/分钟、5000 次/小时。
+      建 Token 时**不需要勾任何权限**（公共仓库搜索用匿名额度即可），只填 `ghp_` 开头的字符串。
+    </p>
+  </fieldset>
+
   <div class="form-actions">
     <button class="btn primary" type="submit">保存</button>
     <button class="btn" type="button" hx-post="/settings/probe" hx-target="#probe" hx-swap="innerHTML">测试连接</button>

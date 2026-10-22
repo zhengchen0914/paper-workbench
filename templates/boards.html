@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}开源榜单 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>开源榜单</h1>
+  <p class="sub">
+    按 GitHub star 排的领域榜
+    <span class="muted">— 榜单 = 一条可编辑的检索式，权威性来自查询定义，不来自程序猜测</span>
+  </p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+{% if not boards %}
+<section class="empty">
+  <p>还没有榜单。</p>
+  <p class="big">在下方「新增榜单」里填一个检索式。</p>
+</section>
+{% else %}
+
+<section class="tabs-row">
+  {% for b in boards %}
+  <a class="tab {{ 'on' if current and b.key == current.key else '' }}"
+     href="/boards?board={{ b.key }}">{{ b.name }}</a>
+  {% endfor %}
+</section>
+
+{% if current %}
+<section class="board-head">
+  <div class="board-meta">
+    <code class="query-chip">{{ current.query }}</code>
+    {% if current.note %}<span class="muted small">{{ current.note }}</span>{% endif %}
+  </div>
+  <div class="board-actions">
+    <form method="post" action="/boards/{{ current.key }}/refresh" class="inline">
+      <button class="btn primary" type="submit">刷新</button>
+    </form>
+    <a class="btn ghost" href="/boards/{{ current.key }}/export.md">导出 Markdown</a>
+    <span class="muted small">
+      {% if current.last_fetch %}
+        上次抓取 {{ current.last_fetch }} · 命中总数 {{ '{:,}'.format(current.total_count) }}
+        {% if current.rate_remaining >= 0 %} · 剩余配额 {{ current.rate_remaining }}{% endif %}
+      {% else %}
+        还没抓过
+      {% endif %}
+    </span>
+  </div>
+  {% if not has_token %}
+  <p class="hint">未配置 GitHub Token：搜索限流 10 次/分钟。<a href="/settings">去设置</a>可提高到 30 次/分钟。</p>
+  {% endif %}
+</section>
+
+{% if entries %}
+<form method="post" action="/boards/{{ current.key }}/roundup" class="board-form">
+  <table class="table board-table">
+    <thead>
+      <tr>
+        <th class="pick-col"><input type="checkbox" onclick="document.querySelectorAll('.repo-pick').forEach(c=>c.checked=this.checked)"></th>
+        <th>#</th><th>项目</th><th class="num-col">Star</th><th class="num-col">变化</th>
+        <th>语言</th><th>更新</th><th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in entries %}
+      <tr>
+        <td class="pick-col"><input class="repo-pick" type="checkbox" name="repos" value="{{ e.full_name }}"></td>
+        <td class="num-cell">{{ e.rank }}</td>
+        <td class="repo-cell">
+          <a href="{{ e.url }}" target="_blank" rel="noreferrer">{{ e.full_name }}</a>
+          {% if e.topics %}<span class="topics">{{ e.topics }}</span>{% endif %}
+        </td>
+        <td class="num-cell">{{ '{:,}'.format(e.stars) }}</td>
+        <td class="num-cell">
+          {% if e.delta > 0 %}<span class="delta up">+{{ e.delta }}</span>
+          {% elif e.delta < 0 %}<span class="delta down">{{ e.delta }}</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td class="muted small">{{ e.language or '—' }}</td>
+        <td class="muted small">{{ e.pushed_at or '—' }}</td>
+        <td class="desc-cell">{{ e.description or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="actionbar">
+    <button class="btn primary" type="submit">用勾选的项目生成盘点文章</button>
+    <span class="muted small">生成后进入终审流程，可换主题、配图、导出交付包</span>
+  </div>
+</form>
+{% else %}
+<section class="empty">
+  <p>这个榜单还没有数据。</p>
+  <p class="big">点右上角「刷新」抓取。</p>
+</section>
+{% endif %}
+
+<details class="board-edit">
+  <summary>编辑「{{ current.name }}」</summary>
+  <form method="post" action="/boards/{{ current.key }}/save" class="settings-form">
+    <fieldset>
+      <label>名称 <input type="text" name="name" value="{{ current.name }}"></label>
+      <label>检索式 <input type="text" name="query" value="{{ current.query }}"></label>
+      <label>说明 <input type="text" name="note" value="{{ current.note }}"></label>
+      <label>取前几条 <input type="text" name="per_page" value="{{ current.per_page }}"></label>
+      <p class="hint">
+        检索式建议用 <code>topic:xxx</code> 或 <code>"精确短语" in:description</code>；
+        裸关键词 + <code>in:readme</code> 会把任何提过该词的仓库都捞进来。
+      </p>
+    </fieldset>
+    <div class="form-actions">
+      <button class="btn primary" type="submit">保存</button>
+    </div>
+  </form>
+  <form method="post" action="/boards/{{ current.key }}/delete" class="inline"
+        onsubmit="return confirm('删除这个榜单及其快照？')">
+    <button class="btn ghost" type="submit">删除榜单</button>
+  </form>
+</details>
+
+{% endif %}
+{% endif %}
+
+<details class="board-edit" {{ 'open' if not boards else '' }}>
+  <summary>新增榜单</summary>
+  <form method="post" action="/boards/new" class="settings-form">
+    <fieldset>
+      <label>名称 <input type="text" name="name" placeholder="例如：Rust 生态"></label>
+      <label>检索式 <input type="text" name="query" placeholder="topic:rust stars:>1000"></label>
+      <label>说明 <input type="text" name="note" placeholder="选填"></label>
+      <label>取前几条 <input type="text" name="per_page" value="30"></label>
+    </fieldset>
+    <div class="form-actions">
+      <button class="btn primary" type="submit">添加</button>
+    </div>
+  </form>
+</details>
+
+{% endblock %}

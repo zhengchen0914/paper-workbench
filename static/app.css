@@ -458,6 +458,49 @@ fieldset input { margin-bottom: 4px; }
 }
 .paper-frame h1, .paper-frame h2, .paper-frame h3 { font-family: inherit; }
 
+/* ---------- 开源榜单 ---------- */
+.board-head {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px;
+}
+.board-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.query-chip {
+  background: #f1ede2; border-radius: 6px; padding: 3px 8px;
+  font-size: 12.5px; color: var(--ink-soft); word-break: break-all;
+}
+.board-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.board-form { margin-bottom: 24px; }
+.board-table { font-size: 13px; }
+.board-table .pick-col { width: 30px; }
+.board-table .num-col { width: 90px; text-align: right; }
+.board-table .num-cell { text-align: right; }
+.board-table .repo-cell { font-weight: 600; }
+.board-table .repo-cell a { color: var(--ink); }
+.board-table .topics {
+  display: block; font-weight: 400; font-size: 11px;
+  color: var(--muted); margin-top: 2px;
+}
+.board-table .desc-cell {
+  color: var(--muted); font-size: 12.5px; max-width: 380px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.delta { font-variant-numeric: tabular-nums; font-size: 12px; }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--bad); }
+
+.board-edit {
+  margin: 18px 0 30px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 0 16px;
+}
+.board-edit summary {
+  cursor: pointer; padding: 12px 0; font-size: 13.5px; color: var(--muted);
+}
+.board-edit summary:hover { color: var(--ink); }
+.board-edit .settings-form { max-width: 100%; margin-bottom: 16px; }
+.board-edit fieldset { margin-bottom: 12px; }
+
+
 
 
 

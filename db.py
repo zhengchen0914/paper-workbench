@@ -120,6 +120,38 @@ CREATE TABLE IF NOT EXISTS candidates (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_candidates_source_ext ON candidates(source, external_id);
 CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status, score);
+
+CREATE TABLE IF NOT EXISTS boards (
+    uid             TEXT PRIMARY KEY,
+    key             TEXT NOT NULL UNIQUE,
+    name            TEXT NOT NULL,
+    query           TEXT NOT NULL,
+    note            TEXT NOT NULL DEFAULT '',
+    per_page        INTEGER NOT NULL DEFAULT 30,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    last_fetch      TEXT NOT NULL DEFAULT '',
+    total_count     INTEGER NOT NULL DEFAULT 0,
+    rate_remaining  INTEGER NOT NULL DEFAULT -1,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS board_entries (
+    uid         TEXT PRIMARY KEY,
+    board_key   TEXT NOT NULL,
+    rank        INTEGER NOT NULL,
+    full_name   TEXT NOT NULL,
+    url         TEXT NOT NULL DEFAULT '',
+    stars       INTEGER NOT NULL DEFAULT 0,
+    prev_stars  INTEGER NOT NULL DEFAULT 0,
+    forks       INTEGER NOT NULL DEFAULT 0,
+    language    TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    topics      TEXT NOT NULL DEFAULT '',
+    pushed_at   TEXT NOT NULL DEFAULT '',
+    fetched_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_board_entries ON board_entries(board_key, rank);
 """
 
 DEFAULT_SETTINGS: dict[str, str] = {
@@ -138,6 +170,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "radar_per_keyword": "15",
     "radar_max_age_days": "180",
     "radar_last_fetch": "",
+    "github_token": "",
 }
 
 
@@ -184,6 +217,33 @@ def init_db() -> None:
                 "INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)",
                 (key, value),
             )
+    seed_boards()
+
+
+def seed_boards() -> None:
+    """首次启动写入预置榜单；已存在的 key 不覆盖（用户可能改过查询式）。"""
+    import github_boards
+
+    existing = {row["key"] for row in query("SELECT key FROM boards")}
+    timestamp = now()
+    for spec in github_boards.DEFAULT_BOARDS:
+        if spec["key"] in existing:
+            continue
+        execute(
+            "INSERT INTO boards(uid, key, name, query, note, per_page, enabled, "
+            "created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                new_uid("board"),
+                spec["key"],
+                spec["name"],
+                spec["query"],
+                spec.get("note", ""),
+                int(spec.get("per_page", 30)),
+                1,
+                timestamp,
+                timestamp,
+            ),
+        )
 
 
 # 增量列：老库不需要重建，启动时补齐即可

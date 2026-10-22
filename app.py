@@ -28,6 +28,7 @@ from markupsafe import Markup
 
 import db
 import export
+import github_boards
 import jobs
 import llm
 import packaging
@@ -867,6 +868,227 @@ def radar_restore(uid: str):
     return RedirectResponse("/radar?status=all", status_code=303)
 
 
+# ---------------------------------------------------------------- GitHub 榜单
+
+
+def board_snapshot(key: str) -> list[dict[str, Any]]:
+    rows = db.query(
+        "SELECT * FROM board_entries WHERE board_key=? ORDER BY rank", (key,)
+    )
+    for row in rows:
+        row["delta"] = int(row["stars"]) - int(row["prev_stars"])
+    return rows
+
+
+@app.get("/boards", response_class=HTMLResponse)
+def boards_page(request: Request, board: str = "", msg: str = "") -> HTMLResponse:
+    boards = db.query("SELECT * FROM boards WHERE enabled=1 ORDER BY rowid")
+    current = None
+    entries: list[dict[str, Any]] = []
+    if boards:
+        current = next((item for item in boards if item["key"] == board), boards[0])
+        entries = board_snapshot(current["key"])
+    token = bool(db.get_settings().get("github_token"))
+    return render(
+        request,
+        "boards.html",
+        active="boards",
+        boards=boards,
+        current=current,
+        entries=entries,
+        has_token=token,
+        msg=msg,
+    )
+
+
+@app.post("/boards/{key}/refresh")
+def boards_refresh(key: str):
+    board = db.one("SELECT * FROM boards WHERE key=?", (key,))
+    if board is None:
+        return RedirectResponse("/boards?msg=榜单不存在", status_code=303)
+
+    settings = db.get_settings()
+    previous = {
+        row["full_name"]: int(row["stars"])
+        for row in db.query(
+            "SELECT full_name, stars FROM board_entries WHERE board_key=?", (key,)
+        )
+    }
+    try:
+        result = github_boards.fetch_board(
+            board["query"],
+            per_page=int(board["per_page"] or 30),
+            token=settings.get("github_token", ""),
+        )
+    except github_boards.RateLimitError as exc:
+        return RedirectResponse(
+            f"/boards?board={key}&msg=触发限流：{exc}，{exc.wait_hint()}", status_code=303
+        )
+    except github_boards.GitHubError as exc:
+        return RedirectResponse(f"/boards?board={key}&msg=抓取失败：{exc}", status_code=303)
+
+    db.execute("DELETE FROM board_entries WHERE board_key=?", (key,))
+    for rank, item in enumerate(result.items, start=1):
+        db.execute(
+            "INSERT INTO board_entries(uid, board_key, rank, full_name, url, stars, "
+            "prev_stars, forks, language, description, topics, pushed_at, fetched_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                db.new_uid("entry"),
+                key,
+                rank,
+                item["full_name"],
+                item["url"],
+                item["stars"],
+                previous.get(item["full_name"], item["stars"]),
+                item["forks"],
+                item["language"],
+                item["description"],
+                item["topics"],
+                item["pushed_at"],
+                result.fetched_at,
+            ),
+        )
+    db.execute(
+        "UPDATE boards SET last_fetch=?, total_count=?, rate_remaining=?, updated_at=? "
+        "WHERE key=?",
+        (
+            result.fetched_at,
+            result.total_count,
+            result.rate_remaining if result.rate_remaining is not None else -1,
+            db.now(),
+            key,
+        ),
+    )
+    db.log_event(key, "board:refresh", f"{len(result.items)} 项")
+    quota = (
+        f"，剩余配额 {result.rate_remaining}/{result.rate_limit}"
+        if result.rate_remaining is not None
+        else ""
+    )
+    return RedirectResponse(
+        f"/boards?board={key}&msg=已刷新 {len(result.items)} 项，命中总数 "
+        f"{result.total_count:,}{quota}",
+        status_code=303,
+    )
+
+
+@app.post("/boards/new")
+def boards_new(
+    name: str = Form(default=""),
+    query: str = Form(default=""),
+    note: str = Form(default=""),
+    per_page: str = Form(default="30"),
+):
+    name = name.strip()
+    query = query.strip()
+    if not name or not query:
+        return RedirectResponse("/boards?msg=名称和查询式都不能为空", status_code=303)
+    key = re.sub(r"[^a-z0-9_-]+", "-", name.lower()).strip("-")[:24] or db.new_uid("b")[:10]
+    if db.one("SELECT key FROM boards WHERE key=?", (key,)):
+        key = f"{key}-{db.new_uid('x')[:4]}"
+    try:
+        page = max(1, min(int(float(per_page or 30)), 100))
+    except (TypeError, ValueError):
+        page = 30
+    timestamp = db.now()
+    db.execute(
+        "INSERT INTO boards(uid, key, name, query, note, per_page, enabled, "
+        "created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (db.new_uid("board"), key, name, query, note.strip(), page, 1, timestamp, timestamp),
+    )
+    return RedirectResponse(f"/boards?board={key}&msg=已添加榜单，点刷新抓取", status_code=303)
+
+
+@app.post("/boards/{key}/save")
+def boards_save(
+    key: str,
+    name: str = Form(default=""),
+    query: str = Form(default=""),
+    note: str = Form(default=""),
+    per_page: str = Form(default="30"),
+):
+    board = db.one("SELECT * FROM boards WHERE key=?", (key,))
+    if board is None:
+        return RedirectResponse("/boards?msg=榜单不存在", status_code=303)
+    try:
+        page = max(1, min(int(float(per_page or 30)), 100))
+    except (TypeError, ValueError):
+        page = 30
+    db.execute(
+        "UPDATE boards SET name=?, query=?, note=?, per_page=?, updated_at=? WHERE key=?",
+        (
+            name.strip() or board["name"],
+            query.strip() or board["query"],
+            note.strip(),
+            page,
+            db.now(),
+            key,
+        ),
+    )
+    return RedirectResponse(f"/boards?board={key}&msg=已保存", status_code=303)
+
+
+@app.post("/boards/{key}/delete")
+def boards_delete(key: str):
+    db.execute("DELETE FROM board_entries WHERE board_key=?", (key,))
+    db.execute("DELETE FROM boards WHERE key=?", (key,))
+    return RedirectResponse("/boards?msg=已删除榜单", status_code=303)
+
+
+@app.get("/boards/{key}/export.md")
+def boards_export(key: str) -> Response:
+    board = db.one("SELECT * FROM boards WHERE key=?", (key,))
+    if board is None:
+        return RedirectResponse("/boards?msg=榜单不存在", status_code=303)
+    entries = board_snapshot(key)
+    lines = [
+        f"# {board['name']}",
+        "",
+        f"> 数据来源：GitHub Search API，按 star 数降序 · 检索式 `{board['query']}`",
+        f"> 抓取时间：{board['last_fetch'] or '未抓取'} · 命中总数 {board['total_count']:,}",
+        "",
+        "| 排名 | 项目 | Star | 语言 | 更新 | 说明 |",
+        "| --- | --- | ---: | --- | --- | --- |",
+    ]
+    for row in entries:
+        desc = (row["description"] or "").replace("|", "／").replace("\n", " ")[:60]
+        lines.append(
+            f"| {row['rank']} | [{row['full_name']}]({row['url']}) | {row['stars']:,} | "
+            f"{row['language'] or '-'} | {row['pushed_at']} | {desc} |"
+        )
+    payload = "\n".join(lines).encode("utf-8")
+    filename = f"{_safe_filename(board['name'])}.md"
+    disposition = (
+        f'attachment; filename="board.md"; filename*=UTF-8\'\'{quote(filename)}'
+    )
+    return Response(
+        payload,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@app.post("/boards/{key}/roundup")
+def boards_roundup(key: str, repos: list[str] = Form(default=[])):
+    board = db.one("SELECT * FROM boards WHERE key=?", (key,))
+    if board is None:
+        return RedirectResponse("/boards?msg=榜单不存在", status_code=303)
+    if not repos:
+        return RedirectResponse(
+            f"/boards?board={key}&msg=先勾选要写进文章的项目", status_code=303
+        )
+    entries = board_snapshot(key)
+    picked = [row for row in entries if row["full_name"] in set(repos)]
+    picked.sort(key=lambda row: int(row["rank"]))
+    try:
+        article_uid = jobs.start_roundup(board, picked)
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        return RedirectResponse(f"/boards?board={key}&msg=创建失败：{message}", status_code=303)
+    return RedirectResponse(f"/article/{article_uid}", status_code=303)
+
+
 # ---------------------------------------------------------------- 选题池（闸门 1）
 
 
@@ -934,6 +1156,7 @@ def save_settings_form(
     radar_keywords: str = Form(default=""),
     radar_per_keyword: str = Form(default="15"),
     radar_max_age_days: str = Form(default="180"),
+    github_token: str = Form(default=""),
 ) -> RedirectResponse:
     current = db.get_settings()
     values = {
@@ -951,6 +1174,10 @@ def save_settings_form(
         values["llm_api_key"] = llm_api_key.strip()
     else:
         values["llm_api_key"] = current.get("llm_api_key", "")
+    if github_token.strip():
+        values["github_token"] = github_token.strip()
+    else:
+        values["github_token"] = current.get("github_token", "")
     db.save_settings(values)
     db.log_event("settings", "save", values["llm_model"])
     return RedirectResponse("/settings?msg=已保存", status_code=303)

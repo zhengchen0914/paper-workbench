@@ -372,6 +372,52 @@ ARTICLE_PRESETS: dict[str, dict[str, str]] = {
 `#标签` `#标签`
 ```""",
     },
+    "roundup": {
+        "name": "榜单盘点",
+        "hint": "开源项目排行榜 → 盘点文章，适合周期性内容",
+        "words": "全文 1500–2500 字。项目介绍每条约 60–100 字，不要逐个长篇展开。",
+        "min": 1500,
+        "max": 2500,
+        "budget": (
+            "- 摘要卡片：≤140 字\n"
+            "- 01 这份榜单是怎么来的：≤300 字\n"
+            "- 02 Top N 一览：表格，每个项目一行\n"
+            "- 03 值得注意的三个方向：≤700 字\n"
+            "- 04 谁适合用哪个：≤500 字\n"
+            "- 05 写在最后：≤200 字"
+        ),
+        "structure": """```
+# 文章标题（不超过 30 字）
+
+> 💡摘要卡片（公众号摘要栏直接复制）
+> 100–140 字。点明这是什么榜、谁在领跑、最大的变化是什么。
+
+---
+
+**🔖封面文案参考**
+> 【主标题大字】8–14 字
+> 【副标题小字】10–18 字
+> 【封面标签】#标签1 #标签2 #标签3
+
+---
+
+## 01 这份榜单是怎么来的
+（说清数据来源与排序口径，不要写成免责声明）
+## 02 Top N 一览
+（一张表格：排名 / 项目 / Star / 一句话定位）
+## 03 值得注意的三个方向
+## 04 谁适合用哪个
+## 05 写在最后
+
+🔗 相关链接
+- 榜单地址：…
+
+👇 欢迎点赞、在看、转发，关注我们，持续分享开源生态观察
+
+**公众号文末标签：**
+`#标签` `#标签`
+```""",
+    },
 }
 
 DEFAULT_PRESET = "deep"
@@ -431,6 +477,68 @@ def build_article_messages(
         "## 背景信息\n" + "\n".join(hints) + "\n\n"
         "## 论文解读原文\n"
         f"{reading.get('content', '')}"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+ROUNDUP_OVERRIDE = (
+    "（本次任务类型：**开源项目榜单盘点**，不是论文拆解。"
+    "提示词里凡出现「论文」「解读」的地方，按「项目」「榜单」理解；"
+    "不要编造项目没有的指标，只依据下面给出的仓库信息与描述。）"
+)
+
+
+def build_roundup_messages(
+    board_name: str,
+    repos: list[dict[str, Any]],
+    *,
+    board_query: str = "",
+    note: str = "",
+) -> list[dict[str, str]]:
+    """榜单数据 → 盘点文章。复用 ARTICLE_SYSTEM，换成 roundup 结构。"""
+    preset_key, preset_def = get_preset("roundup")
+    system = ARTICLE_SYSTEM.replace("{{STRUCTURE}}", preset_def["structure"])
+    length_block = (
+        "## 篇幅（硬约束）\n\n"
+        f"{preset_def['words']}\n"
+        f"目标区间 {preset_def['min']}–{preset_def['max']} 字。"
+        f"超过 {preset_def['max']} 字视为不合格：优先删掉重复论证与铺垫。\n\n"
+        "各节字数上限：\n" + preset_def.get("budget", "")
+    )
+    system = system.replace("{{LENGTH}}", length_block)
+    system = ROUNDUP_OVERRIDE + "\n\n" + system
+
+    lines = [
+        f"榜单名称：{board_name}",
+        f"取数口径：按 GitHub star 数降序",
+    ]
+    if board_query:
+        lines.append(f"检索式：{board_query}")
+    if note:
+        lines.append(f"榜单说明：{note}")
+    lines.append(f"入选项目数：{len(repos)}")
+
+    rows = []
+    for index, repo in enumerate(repos, 1):
+        parts = [f"{index}. {repo['full_name']}"]
+        parts.append(f"★{repo['stars']}")
+        if repo.get("language"):
+            parts.append(str(repo["language"]))
+        if repo.get("pushed_at"):
+            parts.append(f"最近更新 {repo['pushed_at']}")
+        desc = (repo.get("description") or "").strip()
+        if desc:
+            parts.append(desc[:160])
+        rows.append(" | ".join(parts))
+
+    user = (
+        "根据下面的榜单数据写一篇盘点文章。\n\n"
+        "## 榜单信息\n" + "\n".join(lines) + "\n\n"
+        "## 项目列表（排名 / 仓库 / Star / 语言 / 最近更新 / 一句话描述）\n"
+        + "\n".join(rows)
     )
     return [
         {"role": "system", "content": system},
