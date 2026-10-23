@@ -3,4 +3,4 @@
 只在这里改；页脚、CHANGELOG 与 git tag 都对齐它。
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
