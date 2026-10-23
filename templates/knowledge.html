@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}知识库 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <h1>科研知识库</h1>
+  <p class="sub">
+    一篇论文 2–4 条创新点，按机制可跨论文聚合
+    <span class="muted">— 待确认的条目不会进入检索结果</span>
+  </p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<section class="stats kb-stats">
+  <div class="stat"><span class="num">{{ counts.get('pending', 0) }}</span><span class="cap">待确认</span></div>
+  <div class="stat"><span class="num">{{ counts.get('verified', 0) }}</span><span class="cap">已确认</span></div>
+  <div class="stat"><span class="num">{{ counts.get('rejected', 0) }}</span><span class="cap">已丢弃</span></div>
+  <div class="stat"><span class="num">{{ mechanisms | selectattr('n') | list | length }}</span><span class="cap">有内容的机制</span></div>
+</section>
+
+<section class="tabs-row">
+  <a class="tab {{ 'on' if status == 'pending' else '' }}" href="/knowledge?status=pending">待确认</a>
+  <a class="tab {{ 'on' if status == 'verified' else '' }}" href="/knowledge?status=verified">已确认</a>
+  <a class="tab {{ 'on' if status == 'rejected' else '' }}" href="/knowledge?status=rejected">已丢弃</a>
+  <a class="tab {{ 'on' if status == 'all' else '' }}" href="/knowledge?status=all">全部</a>
+</section>
+
+<form method="get" action="/knowledge" class="kb-filter">
+  <input type="hidden" name="status" value="{{ status }}">
+  <label>机制
+    <select name="mechanism">
+      <option value="">全部</option>
+      {% for m in mechanisms %}
+        {% if m.n %}
+        <option value="{{ m.name }}" {{ 'selected' if m.name == mechanism else '' }}>{{ m.name }}（{{ m.n }}）</option>
+        {% endif %}
+      {% endfor %}
+    </select>
+  </label>
+  <label>类型
+    <select name="type">
+      <option value="">全部</option>
+      {% for t in novelty_types %}
+        <option value="{{ t }}" {{ 'selected' if t == novelty_type else '' }}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="grow">搜索
+    <input type="text" name="q" value="{{ q }}" placeholder="标题 / 问题 / 机制">
+  </label>
+  <button class="btn" type="submit">筛选</button>
+</form>
+
+{% if groups %}
+<p class="muted small">共 {{ total }} 条，按论文分组</p>
+
+{% for g in groups %}
+<section class="kb-group">
+  <div class="kb-group-head">
+    <h2>{{ g.title }}</h2>
+    <span class="muted small">{{ g.entries | length }} 条</span>
+  </div>
+  {% for it in g.entries %}
+  <article class="insight-card">
+    <div class="insight-top">
+      <span class="pill {{ 'ready' if it.status == 'verified' else ('failed' if it.status == 'rejected' else 'running') }}">
+        {{ {'pending': '待确认', 'verified': '已确认', 'rejected': '已丢弃'}.get(it.status, it.status) }}
+      </span>
+      {% if it.novelty_type %}<span class="type-chip">{{ it.novelty_type }}</span>{% endif %}
+      <a class="insight-title" href="/knowledge/{{ it.uid }}">{{ it.title }}</a>
+    </div>
+    <dl class="insight-body">
+      {% if it.problem %}<dt>旧问题</dt><dd>{{ it.problem }}</dd>{% endif %}
+      {% if it.mechanism %}<dt>机制</dt><dd>{{ it.mechanism }}</dd>{% endif %}
+      {% if it.evidence %}<dt>原文依据</dt><dd class="evidence">{{ it.evidence }}</dd>{% endif %}
+      {% if it.mech_names %}<dt>机制标签</dt><dd class="mech-names">{{ it.mech_names }}</dd>{% endif %}
+    </dl>
+    <div class="insight-actions">
+      <a class="btn tiny ghost" href="/knowledge/{{ it.uid }}">查看/编辑</a>
+      {% if it.status != 'verified' %}
+      <form method="post" action="/knowledge/{{ it.uid }}/verify" class="inline">
+        <button class="btn tiny primary" type="submit">确认</button>
+      </form>
+      {% endif %}
+      {% if it.status != 'rejected' %}
+      <form method="post" action="/knowledge/{{ it.uid }}/reject" class="inline">
+        <button class="btn tiny ghost" type="submit">丢弃</button>
+      </form>
+      {% endif %}
+      {% if it.draft_uid %}
+      <a class="btn tiny ghost" href="/draft/{{ it.draft_uid }}">看原文解读</a>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{% else %}
+<section class="empty">
+  <p>
+    {% if status == 'pending' %}没有待确认的创新点。
+    {% elif status == 'verified' %}还没有确认过的条目。
+    {% else %}这个条件下没有条目。{% endif %}
+  </p>
+  <p class="big">解读生成完成后会自动抽取，进「待确认」队列。</p>
+</section>
+{% endif %}
+
+{% endblock %}

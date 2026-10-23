@@ -31,6 +31,7 @@ import db
 import export
 import github_boards
 import jobs
+import knowledge
 import llm
 import packaging
 import pdfx
@@ -326,6 +327,7 @@ def draft_page(request: Request, uid: str) -> Response:
         has_key=bool(db.get_settings().get("llm_api_key")),
         trace=trace_for(draft["content"], paper),
         presets=prompts.preset_options(),
+        insight_count=knowledge.count_for_draft(uid),
     )
 
 
@@ -1268,6 +1270,203 @@ def start_batch(engine: str = Form(default="builtin")):
     rows = db.query("SELECT uid FROM papers WHERE selected=1")
     queued = jobs.start_batch([row["uid"] for row in rows], engine=engine)
     return RedirectResponse(f"/inbox?msg=已排入队列 {queued} 篇", status_code=303)
+
+
+# ---------------------------------------------------------------- 科研知识库
+
+
+def insight_rows(
+    *,
+    status: str = "pending",
+    mechanism: str = "",
+    novelty_type: str = "",
+    query_text: str = "",
+) -> list[dict[str, Any]]:
+    sql = [
+        "SELECT i.*, p.title AS paper_title, p.filename AS paper_filename, "
+        "(SELECT GROUP_CONCAT(m.name, ' / ') FROM insight_mechanisms im "
+        " JOIN mechanisms m ON m.uid = im.mechanism_uid WHERE im.insight_uid = i.uid) "
+        "AS mech_names "
+        "FROM insights i LEFT JOIN papers p ON p.uid = i.paper_uid WHERE 1=1"
+    ]
+    params: list[Any] = []
+    if status and status != "all":
+        sql.append("AND i.status = ?")
+        params.append(status)
+    if novelty_type:
+        sql.append("AND i.novelty_type = ?")
+        params.append(novelty_type)
+    if mechanism:
+        sql.append(
+            "AND EXISTS (SELECT 1 FROM insight_mechanisms im JOIN mechanisms m "
+            "ON m.uid = im.mechanism_uid WHERE im.insight_uid = i.uid AND m.name = ?)"
+        )
+        params.append(mechanism)
+    if query_text.strip():
+        like = f"%{query_text.strip()}%"
+        sql.append(
+            "AND (i.title LIKE ? OR i.problem LIKE ? OR i.mechanism LIKE ? "
+            "OR i.applies_to LIKE ?)"
+        )
+        params.extend([like, like, like, like])
+    sql.append("ORDER BY i.paper_uid, i.ordinal")
+    return db.query(" ".join(sql), tuple(params))
+
+
+def group_by_paper(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """按论文分组：一次看一篇的 2-4 条，比翻 68 张卡高效。"""
+    groups: list[dict[str, Any]] = []
+    index: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = row["paper_uid"] or f"__draft__{row['draft_uid']}"
+        group = index.get(key)
+        if group is None:
+            group = {
+                "key": key,
+                "paper_uid": row["paper_uid"],
+                "title": row["paper_title"] or row["paper_filename"] or "（无关联论文）",
+                "entries": [],
+            }
+            index[key] = group
+            groups.append(group)
+        group["entries"].append(row)
+    return groups
+
+
+@app.get("/knowledge", response_class=HTMLResponse)
+def knowledge_page(
+    request: Request,
+    status: str = "pending",
+    mechanism: str = "",
+    type: str = "",
+    q: str = "",
+    msg: str = "",
+) -> HTMLResponse:
+    rows = insight_rows(status=status, mechanism=mechanism, novelty_type=type, query_text=q)
+    groups = group_by_paper(rows)
+    counts = {
+        row["status"]: row["n"]
+        for row in db.query("SELECT status, COUNT(*) AS n FROM insights GROUP BY status")
+    }
+    mechanisms = db.query(
+        "SELECT m.name, m.verified, COUNT(im.insight_uid) AS n FROM mechanisms m "
+        "LEFT JOIN insight_mechanisms im ON im.mechanism_uid = m.uid "
+        "GROUP BY m.uid ORDER BY n DESC, m.name"
+    )
+    return render(
+        request,
+        "knowledge.html",
+        active="knowledge",
+        groups=groups,
+        total=len(rows),
+        counts=counts,
+        mechanisms=mechanisms,
+        status=status,
+        mechanism=mechanism,
+        novelty_type=type,
+        q=q,
+        novelty_types=knowledge.NOVELTY_TYPES,
+        msg=msg,
+    )
+
+
+def insight_detail(uid: str) -> dict[str, Any] | None:
+    row = db.one(
+        "SELECT i.*, p.title AS paper_title, p.filename AS paper_filename "
+        "FROM insights i LEFT JOIN papers p ON p.uid = i.paper_uid WHERE i.uid = ?",
+        (uid,),
+    )
+    if row is None:
+        return None
+    row["mechanisms"] = db.query(
+        "SELECT m.uid, m.name, m.verified, im.variant_note FROM insight_mechanisms im "
+        "JOIN mechanisms m ON m.uid = im.mechanism_uid WHERE im.insight_uid = ? "
+        "ORDER BY m.name",
+        (uid,),
+    )
+    row["related"] = db.query(
+        "SELECT DISTINCT i2.uid, i2.title, i2.status, p2.title AS paper_title "
+        "FROM insight_mechanisms im1 "
+        "JOIN insight_mechanisms im2 ON im2.mechanism_uid = im1.mechanism_uid "
+        "JOIN insights i2 ON i2.uid = im2.insight_uid "
+        "LEFT JOIN papers p2 ON p2.uid = i2.paper_uid "
+        "WHERE im1.insight_uid = ? AND i2.uid != ? LIMIT 12",
+        (uid, uid),
+    )
+    return row
+
+
+@app.get("/knowledge/{uid}", response_class=HTMLResponse)
+def knowledge_detail_page(request: Request, uid: str, msg: str = "") -> Response:
+    row = insight_detail(uid)
+    if row is None:
+        return RedirectResponse("/knowledge?msg=条目不存在", status_code=303)
+    return render(
+        request,
+        "knowledge_detail.html",
+        active="knowledge",
+        item=row,
+        novelty_types=knowledge.NOVELTY_TYPES,
+        msg=msg,
+    )
+
+
+@app.post("/knowledge/{uid}/verify")
+def knowledge_verify(uid: str):
+    db.execute(
+        "UPDATE insights SET status='verified', updated_at=? WHERE uid=?", (db.now(), uid)
+    )
+    db.log_event(uid, "insight:verify", "")
+    return RedirectResponse("/knowledge?msg=已确认", status_code=303)
+
+
+@app.post("/knowledge/{uid}/reject")
+def knowledge_reject(uid: str):
+    db.execute(
+        "UPDATE insights SET status='rejected', updated_at=? WHERE uid=?", (db.now(), uid)
+    )
+    return RedirectResponse("/knowledge?msg=已丢弃", status_code=303)
+
+
+@app.post("/knowledge/{uid}/save")
+def knowledge_save(
+    uid: str,
+    title: str = Form(default=""),
+    problem: str = Form(default=""),
+    mechanism: str = Form(default=""),
+    novelty_type: str = Form(default=""),
+    applies_to: str = Form(default=""),
+    limitation: str = Form(default=""),
+    status: str = Form(default="pending"),
+):
+    db.execute(
+        "UPDATE insights SET title=?, problem=?, mechanism=?, novelty_type=?, "
+        "applies_to=?, limitation=?, status=?, updated_at=? WHERE uid=?",
+        (
+            title.strip(),
+            problem.strip(),
+            mechanism.strip(),
+            novelty_type.strip(),
+            applies_to.strip(),
+            limitation.strip(),
+            status if status in ("pending", "verified", "rejected") else "pending",
+            db.now(),
+            uid,
+        ),
+    )
+    return RedirectResponse(f"/knowledge/{uid}?msg=已保存", status_code=303)
+
+
+@app.post("/knowledge/draft/{draft_uid}/extract")
+def knowledge_extract(draft_uid: str):
+    try:
+        job_uid = jobs.start_insights(draft_uid, force=True)
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        return RedirectResponse(f"/draft/{draft_uid}?err={message}", status_code=303)
+    if job_uid is None:
+        return RedirectResponse(f"/draft/{draft_uid}?err=已有洞察，未重复抽取", status_code=303)
+    return RedirectResponse(f"/draft/{draft_uid}?msg=已排队抽取创新点", status_code=303)
 
 
 # ---------------------------------------------------------------- 设置

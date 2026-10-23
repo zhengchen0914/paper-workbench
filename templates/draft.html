@@ -86,6 +86,30 @@
 </section>
 {% endif %}
 
+{% if draft.kind == 'reading' and draft.content %}
+<section class="kb-strip">
+  <div>
+    <strong>知识库</strong>
+    <span class="muted small">
+      {% if insight_count %}已抽取 {{ insight_count }} 条创新点{% else %}尚未抽取创新点{% endif %}
+    </span>
+  </div>
+  <div class="kb-strip-actions">
+    {% if insight_count %}
+      <a class="btn tiny" href="/knowledge?status=all&q=">去知识库查看</a>
+      <form method="post" action="/knowledge/draft/{{ draft.uid }}/extract" class="inline"
+            onsubmit="return confirm('重新抽取会替换这篇已有的 '+{{ insight_count }}+' 条创新点，继续？')">
+        <button class="btn tiny ghost" type="submit">重新抽取</button>
+      </form>
+    {% else %}
+      <form method="post" action="/knowledge/draft/{{ draft.uid }}/extract" class="inline">
+        <button class="btn tiny primary" type="submit">抽取创新点</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 {% if trace %}
 <section class="review-grid" style="margin: 6px 0 20px;">
   {% include "_trace.html" %}

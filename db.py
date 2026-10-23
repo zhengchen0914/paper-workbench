@@ -167,6 +167,47 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_board_history
     ON board_history(board_key, full_name, captured_date);
 CREATE INDEX IF NOT EXISTS idx_board_history_lookup
     ON board_history(board_key, captured_date);
+
+-- ---------------------------------------------------------------- 科研知识库
+
+-- 一条 insight = 解读里的一个模块级创新点
+CREATE TABLE IF NOT EXISTS insights (
+    uid           TEXT PRIMARY KEY,
+    paper_uid     TEXT NOT NULL DEFAULT '',
+    draft_uid     TEXT NOT NULL DEFAULT '',
+    draft_version INTEGER NOT NULL DEFAULT 0,
+    ordinal       INTEGER NOT NULL DEFAULT 0,
+    title         TEXT NOT NULL,
+    problem       TEXT NOT NULL DEFAULT '',
+    mechanism     TEXT NOT NULL DEFAULT '',
+    novelty_type  TEXT NOT NULL DEFAULT '',
+    applies_to    TEXT NOT NULL DEFAULT '',
+    limitation    TEXT NOT NULL DEFAULT '',
+    evidence      TEXT NOT NULL DEFAULT '',
+    theme         TEXT NOT NULL DEFAULT '',
+    status        TEXT NOT NULL DEFAULT 'pending',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_insights_draft_ordinal ON insights(draft_uid, ordinal);
+CREATE INDEX IF NOT EXISTS idx_insights_status ON insights(status, created_at);
+
+-- 机制卡：受控词表，verified=0 表示由模型提议、待人工确认
+CREATE TABLE IF NOT EXISTS mechanisms (
+    uid         TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    definition  TEXT NOT NULL DEFAULT '',
+    verified    INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS insight_mechanisms (
+    insight_uid   TEXT NOT NULL,
+    mechanism_uid TEXT NOT NULL,
+    variant_note  TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (insight_uid, mechanism_uid)
+);
+CREATE INDEX IF NOT EXISTS idx_insight_mech ON insight_mechanisms(mechanism_uid);
 """
 
 DEFAULT_SETTINGS: dict[str, str] = {
@@ -233,6 +274,14 @@ def init_db() -> None:
                 (key, value),
             )
     seed_boards()
+    seed_mechanisms()
+
+
+def seed_mechanisms() -> None:
+    """写入受控机制词表（幂等）。延迟导入避免循环依赖。"""
+    import knowledge
+
+    knowledge.ensure_mechanisms()
 
 
 def seed_boards() -> None:

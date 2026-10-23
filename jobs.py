@@ -18,6 +18,7 @@ import threading
 from typing import Any
 
 import db
+import knowledge
 import llm
 import packaging
 import pdfx
@@ -55,6 +56,8 @@ def _worker_loop() -> None:
                     payload["engine"],
                     payload["focus"],
                 )
+            elif kind == "insights":
+                _run_insights(job_uid, payload["draft_uid"])
             elif kind == "article":
                 _run_article(
                     job_uid,
@@ -262,6 +265,12 @@ def _run_reading(job_uid: str, draft_uid: str, engine: str, focus: str) -> None:
         )
         _set_job(job_uid, "done", f"完成，共 {len(body)} 字")
         db.log_event(draft_uid, "generate:done", f"{len(body)} 字 / {config.model}")
+
+        # 解读完成后自动排队抽取创新点；失败不影响解读本身
+        try:
+            start_insights(draft_uid)
+        except Exception:
+            pass
 
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
@@ -598,6 +607,56 @@ def _run_roundup(
     finally:
         with _LOCK:
             _RUNNING.discard(article_uid)
+
+
+# ---------------------------------------------------------------- 知识库抽取
+
+
+def start_insights(draft_uid: str, *, force: bool = False) -> str | None:
+    """把解读送去做创新点抽取。已抽过且非强制时直接返回 None。"""
+    draft = db.one("SELECT * FROM drafts WHERE uid=?", (draft_uid,))
+    if draft is None or not (draft["content"] or "").strip():
+        raise ValueError("解读正文为空，无法抽取创新点")
+    if not force and knowledge.count_for_draft(draft_uid) > 0:
+        return None
+
+    job_uid = db.new_uid("job")
+    timestamp = db.now()
+    db.execute(
+        "INSERT INTO jobs(uid, kind, paper_uid, draft_uid, status, message, created_at) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (job_uid, "insights", draft["paper_uid"], draft_uid, "queued", "排队中", timestamp),
+    )
+    db.log_event(draft_uid, "insights:queued", "auto" if not force else "manual")
+    _ensure_worker()
+    _QUEUE.put(("insights", job_uid, {"draft_uid": draft_uid}))
+    return job_uid
+
+
+def _run_insights(job_uid: str, draft_uid: str) -> None:
+    try:
+        draft = db.one("SELECT * FROM drafts WHERE uid=?", (draft_uid,))
+        if draft is None:
+            raise RuntimeError("解读不存在")
+        paper = None
+        if draft["paper_uid"]:
+            paper = db.one("SELECT * FROM papers WHERE uid=?", (draft["paper_uid"],))
+
+        _set_job(job_uid, "running", "正在抽取创新点…")
+        config = llm.config_from_settings(db.get_settings())
+        messages = knowledge.build_messages(draft, paper)
+        raw = llm.chat_once(config, messages)
+        items = knowledge.parse_insights(raw)
+        if not items:
+            raise RuntimeError("模型没有返回可解析的创新点（可能输出格式跑偏）")
+
+        theme = (paper or {}).get("theme", "") or ""
+        count = knowledge.replace_insights(draft, items, theme=theme)
+        _set_job(job_uid, "done", f"抽出 {count} 条创新点，待确认")
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        _set_job(job_uid, "failed", message)
+        db.log_event(draft_uid, "insights:failed", message)
 
 
 # ---------------------------------------------------------------- 物料与工具

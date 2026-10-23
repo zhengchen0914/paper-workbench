@@ -508,6 +508,82 @@ fieldset input { margin-bottom: 4px; }
   margin-bottom: 14px;
 }
 
+/* ---------- 科研知识库 ---------- */
+.kb-stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.kb-filter {
+  display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 18px;
+}
+.kb-filter label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.kb-filter select, .kb-filter input { width: auto; min-width: 120px; }
+.kb-filter .grow { flex: 1; }
+.kb-filter .grow input { width: 100%; }
+
+.kb-group { margin-bottom: 26px; }
+.kb-group-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding-bottom: 8px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--line-strong);
+}
+.kb-group-head h2 { font-family: var(--serif); font-size: 15px; margin: 0; font-weight: 700; }
+
+.insight-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 10px;
+}
+.insight-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.insight-title { font-size: 14.5px; font-weight: 650; color: var(--ink); }
+.type-chip {
+  font-size: 11px; color: var(--muted); border: 1px solid var(--line-strong);
+  padding: 1px 7px; border-radius: 99px;
+}
+.insight-body { margin: 10px 0 0; display: grid; grid-template-columns: 68px 1fr; gap: 4px 10px; }
+.insight-body dt { font-size: 11.5px; color: var(--muted); padding-top: 2px; }
+.insight-body dd { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink-soft); }
+.insight-body dd.evidence { color: var(--muted); font-style: italic; }
+.insight-body dd.mech-names { color: var(--accent); font-size: 12.5px; }
+.insight-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+.kb-detail { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+.kb-edit {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 18px;
+}
+.kb-edit label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+.kb-edit input, .kb-edit textarea, .kb-edit select { margin-top: 5px; }
+.kb-side { display: flex; flex-direction: column; gap: 12px; }
+.kb-side .card { padding: 12px 16px; }
+.unverified {
+  font-style: normal; font-size: 10px; background: var(--warn-soft);
+  color: var(--warn); border-radius: 3px; padding: 0 4px; margin-left: 4px;
+}
+.evidence-quote {
+  margin: 0; padding: 8px 12px; border-left: 3px solid var(--line-strong);
+  background: #f8f4ec; font-size: 12.5px; line-height: 1.8; color: var(--muted);
+}
+.related-list { list-style: none; margin: 0; padding: 0; }
+.related-list li { padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.related-list li:last-child { border-bottom: none; }
+.related-list a { display: block; color: var(--ink-soft); }
+
+@media (max-width: 940px) {
+  .kb-detail { grid-template-columns: 1fr; }
+  .insight-body { grid-template-columns: 1fr; }
+  .insight-body dt { padding-top: 8px; }
+}
+
+/* 解读页的「知识库」条 */
+.kb-strip {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: var(--radius);
+  padding: 10px 16px; margin: 6px 0 18px; flex-wrap: wrap;
+}
+.kb-strip-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+
+
 
 
 

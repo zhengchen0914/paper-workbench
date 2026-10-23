@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }} · 知识库{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div class="crumb">
+    <a href="/knowledge">知识库</a> /
+    <a href="/knowledge?status=all">全部</a>
+  </div>
+  <h1>{{ item.title }}</h1>
+  <p class="sub">
+    <span class="pill {{ 'ready' if item.status == 'verified' else ('failed' if item.status == 'rejected' else 'running') }}">
+      {{ {'pending': '待确认', 'verified': '已确认', 'rejected': '已丢弃'}.get(item.status, item.status) }}
+    </span>
+    {% if item.paper_title %}<span class="muted">{{ item.paper_title[:60] }}</span>{% endif %}
+    {% if item.draft_version %}<span class="muted small">解读 v{{ item.draft_version }}</span>{% endif %}
+  </p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<section class="kb-detail">
+  <form method="post" action="/knowledge/{{ item.uid }}/save" class="kb-edit">
+    <label>一句话创新点
+      <input type="text" name="title" value="{{ item.title }}">
+    </label>
+    <label>旧问题（现有方法哪里做不到）
+      <textarea name="problem" rows="3">{{ item.problem }}</textarea>
+    </label>
+    <label>核心机制
+      <textarea name="mechanism" rows="4">{{ item.mechanism }}</textarea>
+    </label>
+    <div class="row-2">
+      <label>类型
+        <select name="novelty_type">
+          <option value="">未分类</option>
+          {% for t in novelty_types %}
+          <option value="{{ t }}" {{ 'selected' if t == item.novelty_type else '' }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>状态
+        <select name="status">
+          <option value="pending" {{ 'selected' if item.status == 'pending' else '' }}>待确认</option>
+          <option value="verified" {{ 'selected' if item.status == 'verified' else '' }}>已确认</option>
+          <option value="rejected" {{ 'selected' if item.status == 'rejected' else '' }}>已丢弃</option>
+        </select>
+      </label>
+    </div>
+    <label>适用场景
+      <input type="text" name="applies_to" value="{{ item.applies_to }}">
+    </label>
+    <label>局限
+      <input type="text" name="limitation" value="{{ item.limitation }}">
+    </label>
+    <div class="form-actions">
+      <button class="btn primary" type="submit">保存</button>
+    </div>
+  </form>
+
+  <aside class="kb-side">
+    <div class="card">
+      <div class="card-head"><h2>机制标签</h2></div>
+      {% if item.mechanisms %}
+      <p class="tags">
+        {% for m in item.mechanisms %}
+        <span class="tag-chip" title="{{ m.variant_note }}">
+          {{ m.name }}{% if not m.verified %}<em class="unverified">待确认</em>{% endif %}
+        </span>
+        {% endfor %}
+      </p>
+      {% else %}
+      <p class="muted small">还没有机制标签。确认时会用于跨论文聚合。</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>原文依据</h2></div>
+      {% if item.evidence %}
+      <blockquote class="evidence-quote">{{ item.evidence }}</blockquote>
+      {% else %}
+      <p class="muted small">模型没有给出可引用的原句。</p>
+      {% endif %}
+      {% if item.draft_uid %}
+      <p><a class="btn tiny ghost" href="/draft/{{ item.draft_uid }}">打开来源解读</a></p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>同机制的其他创新点</h2>
+        <span class="muted small">{{ item.related | length }} 条</span>
+      </div>
+      {% if item.related %}
+      <ul class="related-list">
+        {% for r in item.related %}
+        <li>
+          <a href="/knowledge/{{ r.uid }}">{{ r.title }}</a>
+          <span class="muted small">{{ r.paper_title or '' }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted small">库里还没有共用相同机制的其他条目。</p>
+      {% endif %}
+    </div>
+  </aside>
+</section>
+
+{% endblock %}

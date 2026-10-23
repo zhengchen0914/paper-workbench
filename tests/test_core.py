@@ -5,6 +5,7 @@
 
 import export
 import github_boards
+import knowledge
 import packaging
 import pdfx
 import prompts
@@ -405,3 +406,90 @@ def test_weekly_preset_structure():
     assert "## 01 本周概览" in preset["structure"]
     assert "## 02 开源动态：本周涨星" in preset["structure"]
     assert preset["min"] < preset["max"]
+
+
+# ---------------------------------------------------------------- 知识库抽取
+
+SAMPLE_INSIGHTS = """```json
+{"insights": [
+  {"title": "用可学习滤波器替代固定频域分解",
+   "problem": "固定小波基无法适配不同缺陷尺度",
+   "mechanism": "把 Haar 小波换成可学习卷积，端到端训练",
+   "novelty_type": "架构",
+   "mechanisms": ["频域增强", "小波变换"],
+   "new_mechanisms": [{"name": "自适应子带选择", "definition": "按样本动态选子带"}],
+   "applies_to": "工业表面缺陷",
+   "limitation": "参数量上升",
+   "evidence": "把 Haar 小波换成可学习卷积"},
+  {"title": "无题目条目会被丢弃",
+   "problem": "x", "mechanism": "y", "novelty_type": "瞎写",
+   "mechanisms": ["不存在的机制"], "evidence": "z"}
+]}
+```"""
+
+
+def test_parse_insights_basic_fields():
+    items = knowledge.parse_insights(SAMPLE_INSIGHTS)
+    assert len(items) == 2
+    first = items[0]
+    assert first["title"] == "用可学习滤波器替代固定频域分解"
+    assert first["novelty_type"] == "架构"
+    assert first["ordinal"] == 1
+    assert items[1]["ordinal"] == 2
+
+
+def test_parse_insights_keeps_only_vocabulary_mechanisms():
+    items = knowledge.parse_insights(SAMPLE_INSIGHTS)
+    assert items[0]["mechanisms"] == ["频域增强", "小波变换"]
+    # 词表外的机制被过滤掉
+    assert items[1]["mechanisms"] == []
+
+
+def test_parse_insights_marks_new_mechanisms():
+    items = knowledge.parse_insights(SAMPLE_INSIGHTS)
+    assert items[0]["new_mechanisms"] == [
+        {"name": "自适应子带选择", "definition": "按样本动态选子带"}
+    ]
+
+
+def test_parse_insights_drops_bad_novelty_type():
+    items = knowledge.parse_insights(SAMPLE_INSIGHTS)
+    assert items[1]["novelty_type"] == ""
+
+
+def test_parse_insights_tolerates_garbage():
+    assert knowledge.parse_insights("") == []
+    assert knowledge.parse_insights("不是 JSON") == []
+    assert knowledge.parse_insights('{"insights": "不是数组"}') == []
+    assert knowledge.parse_insights('{"insights": [{"problem": "缺标题"}]}') == []
+
+
+def test_parse_insights_accepts_noise_around_json():
+    raw = '好的，结果如下：{"insights":[{"title":"T","problem":"P","mechanism":"M"}]} 希望有用'
+    items = knowledge.parse_insights(raw)
+    assert len(items) == 1
+    assert items[0]["title"] == "T"
+    assert items[0]["novelty_type"] == ""
+
+
+def test_split_core_section_cuts_at_next_h2():
+    content = "## 30 秒抓核心\n\n前文\n\n## 核心创新\n\n### 1. A\n内容\n\n## 实验结果\n后文"
+    section = knowledge.split_core_section(content)
+    assert "核心创新" in section and "### 1. A" in section
+    assert "实验结果" not in section
+    assert "30 秒抓核心" not in section
+
+
+def test_split_core_section_falls_back_to_full_text():
+    content = "没有任何标准章节的解读正文"
+    assert knowledge.split_core_section(content) == content
+
+
+def test_build_messages_injects_vocabulary():
+    messages = knowledge.build_messages(
+        {"title": "T", "content": "## 核心创新\n### 1. A"}, None
+    )
+    system = messages[0]["content"]
+    assert "频域增强" in system and "原型学习" in system
+    assert "{mechanism_list}" not in system
+    assert "解读标题：T" in messages[1]["content"]
