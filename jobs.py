@@ -617,6 +617,8 @@ def start_insights(draft_uid: str, *, force: bool = False) -> str | None:
     draft = db.one("SELECT * FROM drafts WHERE uid=?", (draft_uid,))
     if draft is None or not (draft["content"] or "").strip():
         raise ValueError("解读正文为空，无法抽取创新点")
+    if not force and draft.get("extract_skip"):
+        return None
     if not force and knowledge.count_for_draft(draft_uid) > 0:
         return None
 

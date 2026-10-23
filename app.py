@@ -1358,7 +1358,13 @@ def knowledge_page(
         "SELECT d.uid, d.title, d.updated_at, LENGTH(d.content) AS chars, "
         "p.filename AS paper_filename "
         "FROM drafts d LEFT JOIN papers p ON p.uid = d.paper_uid "
-        "WHERE d.kind='reading' AND d.content != '' "
+        "WHERE d.kind='reading' AND d.content != '' AND d.extract_skip=0 "
+        "AND NOT EXISTS (SELECT 1 FROM insights i WHERE i.draft_uid = d.uid) "
+        "ORDER BY d.updated_at DESC"
+    )
+    skipped = db.query(
+        "SELECT d.uid, d.title, d.updated_at FROM drafts d "
+        "WHERE d.kind='reading' AND d.content != '' AND d.extract_skip=1 "
         "AND NOT EXISTS (SELECT 1 FROM insights i WHERE i.draft_uid = d.uid) "
         "ORDER BY d.updated_at DESC"
     )
@@ -1376,6 +1382,7 @@ def knowledge_page(
         q=q,
         novelty_types=knowledge.NOVELTY_TYPES,
         extractable=extractable,
+        skipped=skipped,
         msg=msg,
     )
 
@@ -1603,6 +1610,19 @@ def knowledge_extract(draft_uid: str, back: str = Form(default="draft")):
     if job_uid is None:
         return RedirectResponse(f"{target}?err=已有洞察，未重复抽取", status_code=303)
     return RedirectResponse(f"{target}?msg=已排队抽取创新点", status_code=303)
+
+
+@app.post("/knowledge/draft/{draft_uid}/skip")
+def knowledge_skip(draft_uid: str, skip: int = Form(default=1)):
+    """从待抽取队列里忽略 / 恢复这篇解读。"""
+    db.execute(
+        "UPDATE drafts SET extract_skip=?, updated_at=? WHERE uid=?",
+        (1 if skip else 0, db.now(), draft_uid),
+    )
+    db.log_event(draft_uid, "insights:skip" if skip else "insights:unskip", "")
+    action = "已忽略" if skip else "已恢复到待抽取"
+    anchor = "#skipped" if skip else ""
+    return RedirectResponse(f"/knowledge?msg={action}{anchor}", status_code=303)
 
 
 # ---------------------------------------------------------------- 设置

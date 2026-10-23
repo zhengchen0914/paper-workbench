@@ -46,6 +46,37 @@
             <input type="hidden" name="back" value="knowledge">
             <button class="btn tiny primary" type="submit">抽取</button>
           </form>
+          <form method="post" action="/knowledge/draft/{{ d.uid }}/skip" class="inline">
+            <input type="hidden" name="skip" value="1">
+            <button class="btn tiny ghost" type="submit" title="不进知识库，从队列移除">忽略</button>
+          </form>
+          <a class="btn tiny ghost" href="/draft/{{ d.uid }}">看解读</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
+{% if skipped %}
+<details class="kb-queue" id="skipped">
+  <summary>
+    已忽略 <strong>{{ skipped | length }}</strong> 篇
+    <span class="muted small">— 恢复后重新进待抽取队列</span>
+  </summary>
+  <table class="table compact">
+    <thead><tr><th>解读</th><th>更新</th><th></th></tr></thead>
+    <tbody>
+    {% for d in skipped %}
+      <tr>
+        <td class="title-cell">{{ d.title }}</td>
+        <td class="muted small">{{ d.updated_at[:10] }}</td>
+        <td class="queue-actions">
+          <form method="post" action="/knowledge/draft/{{ d.uid }}/skip" class="inline">
+            <input type="hidden" name="skip" value="0">
+            <button class="btn tiny" type="submit">恢复</button>
+          </form>
           <a class="btn tiny ghost" href="/draft/{{ d.uid }}">看解读</a>
         </td>
       </tr>
