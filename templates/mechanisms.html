@@ -13,6 +13,16 @@
 
 {% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
 
+{% if pending %}
+<div class="actionbar" style="margin-bottom:14px">
+  <form method="post" action="/knowledge/mechanisms/confirm-all"
+        onsubmit="return confirm('把 {{ pending }} 个待确认机制全部转为正式？之后仍可改名或合并。')">
+    <button class="btn primary" type="submit">全部确认（{{ pending }}）</button>
+  </form>
+  <span class="muted small">批量转正后可以随时在下面改名、合并或删除</span>
+</div>
+{% endif %}
+
 <form method="post" action="/knowledge/mechanisms/merge" class="merge-bar">
   <span class="merge-label">合并</span>
   <select name="source">

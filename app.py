@@ -1438,6 +1438,23 @@ def knowledge_verify(uid: str):
     return RedirectResponse("/knowledge?msg=已确认", status_code=303)
 
 
+@app.post("/knowledge/confirm-all")
+def knowledge_confirm_all():
+    """批量确认待审条目。用于「先入库、后面统一再改」的节奏。"""
+    row = db.one("SELECT COUNT(*) AS n FROM insights WHERE status='pending'")
+    count = int(row["n"]) if row else 0
+    if count:
+        db.execute(
+            "UPDATE insights SET status='verified', updated_at=? WHERE status='pending'",
+            (db.now(),),
+        )
+        db.log_event("insights", "verify:bulk", f"{count} 条")
+    return RedirectResponse(
+        f"/knowledge?msg=已批量确认 {count} 条（可随时在「已确认」里继续修改）",
+        status_code=303,
+    )
+
+
 # ---------------------------------------------------------------- 机制卡维护
 
 
@@ -1456,6 +1473,18 @@ def mechanisms_page(request: Request, msg: str = "") -> HTMLResponse:
         pending=sum(1 for row in rows if not row["verified"]),
         orphan=sum(1 for row in rows if not row["n"]),
         msg=msg,
+    )
+
+
+@app.post("/knowledge/mechanisms/confirm-all")
+def mechanism_confirm_all():
+    row = db.one("SELECT COUNT(*) AS n FROM mechanisms WHERE verified=0")
+    count = int(row["n"]) if row else 0
+    if count:
+        db.execute("UPDATE mechanisms SET verified=1 WHERE verified=0")
+        db.log_event("mech", "confirm:bulk", f"{count} 个")
+    return RedirectResponse(
+        f"/mechanisms?msg=已把 {count} 个待确认机制转为正式", status_code=303
     )
 
 

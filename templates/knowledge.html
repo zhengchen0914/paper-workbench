@@ -25,6 +25,12 @@
   <a class="tab {{ 'on' if status == 'verified' else '' }}" href="/knowledge?status=verified">已确认</a>
   <a class="tab {{ 'on' if status == 'rejected' else '' }}" href="/knowledge?status=rejected">已丢弃</a>
   <a class="tab {{ 'on' if status == 'all' else '' }}" href="/knowledge?status=all">全部</a>
+  {% if counts.get('pending', 0) %}
+  <form method="post" action="/knowledge/confirm-all" class="inline" style="margin-left:auto"
+        onsubmit="return confirm('把 {{ counts.get('pending', 0) }} 条待确认全部转为已确认？之后仍可在「已确认」里逐条修改。')">
+    <button class="btn tiny primary" type="submit">全部确认（{{ counts.get('pending', 0) }}）</button>
+  </form>
+  {% endif %}
 </section>
 
 {% if extractable %}
