@@ -77,7 +77,21 @@
     <div class="card">
       <div class="card-head"><h2>原文依据</h2></div>
       {% if item.evidence %}
-      <blockquote class="evidence-quote">{{ item.evidence }}</blockquote>
+        {% if item.evidence_ok %}
+        <blockquote class="evidence-quote">{{ item.evidence }}</blockquote>
+        {% else %}
+        <p class="banner warn" style="margin:0 0 10px;font-size:12px;">
+          模型给的这段不是解读原句。下面附上自动找回的原文原句，复核以它为准。
+        </p>
+        <p class="muted small" style="margin:0 0 4px;">模型改写：</p>
+        <blockquote class="evidence-quote">{{ item.evidence }}</blockquote>
+        {% if item.evidence_source %}
+        <p class="muted small" style="margin:12px 0 4px;">
+          原文原句（相似度 {{ '%.2f' | format(item.evidence_score) }}）：
+        </p>
+        <blockquote class="evidence-quote ev-true">{{ item.evidence_source }}</blockquote>
+        {% endif %}
+        {% endif %}
       {% else %}
       <p class="muted small">模型没有给出可引用的原句。</p>
       {% endif %}

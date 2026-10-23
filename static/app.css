@@ -574,13 +574,38 @@ fieldset input { margin-bottom: 4px; }
 }
 
 /* 解读页的「知识库」条 */
-.kb-strip {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+.kb-strip {  display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: var(--surface); border: 1px solid var(--line);
   border-left: 3px solid var(--accent); border-radius: var(--radius);
   padding: 10px 16px; margin: 6px 0 18px; flex-wrap: wrap;
 }
 .kb-strip-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 待抽取队列 */
+.kb-queue {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 0 16px; margin-bottom: 18px;
+}
+.kb-queue summary {
+  cursor: pointer; padding: 12px 0; font-size: 13.5px; color: var(--ink-soft);
+}
+.kb-queue summary:hover { color: var(--ink); }
+.kb-queue summary strong { color: var(--accent); }
+.kb-queue .table { margin-bottom: 12px; }
+.kb-queue .num-col { text-align: right; width: 80px; }
+.queue-actions { display: flex; gap: 6px; white-space: nowrap; }
+
+.ev-warn {
+  font-style: normal; font-size: 10.5px; font-weight: 600;
+  background: var(--warn-soft); color: var(--warn);
+  border-radius: 3px; padding: 0 5px; margin-right: 6px;
+}
+.ev-source {
+  margin-top: 6px; padding: 6px 10px; border-left: 2px solid var(--ok);
+  background: var(--ok-soft); color: var(--ok); font-size: 12px; font-style: normal;
+}
+.ev-true { border-left-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+
 
 
 

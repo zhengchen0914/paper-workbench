@@ -26,6 +26,34 @@
   <a class="tab {{ 'on' if status == 'all' else '' }}" href="/knowledge?status=all">全部</a>
 </section>
 
+{% if extractable %}
+<details class="kb-queue" {{ 'open' if extractable | length <= 5 else '' }}>
+  <summary>
+    待抽取的解读 <strong>{{ extractable | length }}</strong> 篇
+    <span class="muted small">— 一次处理一篇：抽完先确认，再抽下一篇</span>
+  </summary>
+  <table class="table compact">
+    <thead><tr><th>解读</th><th class="num-col">字数</th><th>更新</th><th></th></tr></thead>
+    <tbody>
+    {% for d in extractable %}
+      <tr>
+        <td class="title-cell">{{ d.title }}</td>
+        <td class="num-cell">{{ d.chars }}</td>
+        <td class="muted small">{{ d.updated_at[:10] }}</td>
+        <td class="queue-actions">
+          <form method="post" action="/knowledge/draft/{{ d.uid }}/extract" class="inline">
+            <input type="hidden" name="back" value="knowledge">
+            <button class="btn tiny primary" type="submit">抽取</button>
+          </form>
+          <a class="btn tiny ghost" href="/draft/{{ d.uid }}">看解读</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
 <form method="get" action="/knowledge" class="kb-filter">
   <input type="hidden" name="status" value="{{ status }}">
   <label>机制
@@ -73,7 +101,21 @@
     <dl class="insight-body">
       {% if it.problem %}<dt>旧问题</dt><dd>{{ it.problem }}</dd>{% endif %}
       {% if it.mechanism %}<dt>机制</dt><dd>{{ it.mechanism }}</dd>{% endif %}
-      {% if it.evidence %}<dt>原文依据</dt><dd class="evidence">{{ it.evidence }}</dd>{% endif %}
+      {% if it.evidence %}
+      <dt>原文依据</dt>
+      <dd class="evidence">
+        {% if it.evidence_ok %}
+          {{ it.evidence }}
+        {% else %}
+          <span class="ev-warn" title="模型给的这段不是解读原句">模型改写</span>{{ it.evidence }}
+          {% if it.evidence_source %}
+          <div class="ev-source">
+            <span class="muted">原文原句（自动匹配 {{ '%.2f' | format(it.evidence_score) }}）：</span>{{ it.evidence_source }}
+          </div>
+          {% endif %}
+        {% endif %}
+      </dd>
+      {% endif %}
       {% if it.mech_names %}<dt>机制标签</dt><dd class="mech-names">{{ it.mech_names }}</dd>{% endif %}
     </dl>
     <div class="insight-actions">

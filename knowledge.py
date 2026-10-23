@@ -91,7 +91,9 @@ INSIGHT_SYSTEM = """你是计算机视觉领域的研究者，任务是把一篇
    禁止"挑一个最接近的凑数"——把「主元素二值化」标成「小波变换」，比留空更糟，
    因为它会污染机制卡的聚合。宁可空着，也不要错标。
 5. `new_mechanisms` 最多 2 个，名字用 4–8 个字的技术名词，definition 一句话。
-6. `evidence` 必须是解读原文的连续片段，不能改写。找不到合适原句就把该条 insight 去掉。
+6. `evidence` 必须从解读原文**逐字复制**一段连续文字（20–80 字），不能改写、不能总结。
+   如果找不到能逐字复制的句子，就把 `evidence` 留空字符串——**留空比改写强**，
+   因为改写的"引文"会让复核失去意义。
 7. `problem` 与 `mechanism` 不要互相重复：前者是"缺什么"，后者是"怎么补的"。
 8. 如果解读里只有 1 个模块，就只输出 1 条；不要为凑数编造。
 """
@@ -180,6 +182,48 @@ def _text(value: Any) -> str:
     return str(value).strip() if isinstance(value, (str, int, float)) else ""
 
 
+def evidence_in_source(evidence: str, content: str) -> bool:
+    """引文是否真的出现在解读原文里。
+
+    去掉所有空白再比——模型常在中文里插空格，那不是改写，不该算不通过。
+    这一步是确定性的，不依赖模型自评：改写过的"引文"会让人工复核失去意义。
+    """
+    needle = re.sub(r"\s+", "", evidence or "")
+    if len(needle) < 8:
+        return False
+    haystack = re.sub(r"\s+", "", content or "")
+    return needle in haystack
+
+
+_SENTENCE_SPLIT = re.compile(r"[。；\n]+")
+
+
+def best_source_sentence(evidence: str, content: str, *, threshold: float = 0.45) -> tuple[str, float]:
+    """引文被改写时，回原文找最接近的那一句。
+
+    实测模型会稳定地把原句重组成「核心创新是…」这类总结，喊提示词没用。
+    与其让复核者对着一段假引文猜，不如把真正的原句找出来摆在他面前。
+    用字符级相似度（difflib）而不是模型——这一步必须是确定性的。
+    """
+    from difflib import SequenceMatcher
+
+    needle = re.sub(r"\s+", "", evidence or "")
+    if len(needle) < 8:
+        return "", 0.0
+
+    best, best_ratio = "", 0.0
+    for chunk in _SENTENCE_SPLIT.split(content or ""):
+        candidate = re.sub(r"\s+", "", chunk).strip()
+        if not (12 <= len(candidate) <= 260):
+            continue
+        ratio = SequenceMatcher(None, needle, candidate).ratio()
+        if ratio > best_ratio:
+            best, best_ratio = candidate, ratio
+    if best_ratio < threshold:
+        return "", best_ratio
+    return best, best_ratio
+
+
 # ---------------------------------------------------------------- 落库
 
 
@@ -211,13 +255,19 @@ def replace_insights(
         conn.execute("DELETE FROM insights WHERE draft_uid=?", (draft_uid,))
 
     timestamp = db.now()
+    source_text = draft.get("content") or ""
     for item in items:
         insight_uid = db.new_uid("ins")
+        evidence_ok = 1 if evidence_in_source(item["evidence"], source_text) else 0
+        matched, score = ("", 0.0)
+        if not evidence_ok:
+            matched, score = best_source_sentence(item["evidence"], source_text)
         db.execute(
             "INSERT INTO insights(uid, paper_uid, draft_uid, draft_version, ordinal, "
             "title, problem, mechanism, novelty_type, applies_to, limitation, evidence, "
-            "theme, status, created_at, updated_at) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "evidence_ok, evidence_source, evidence_score, theme, status, created_at, "
+            "updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 insight_uid,
                 draft.get("paper_uid", ""),
@@ -231,6 +281,9 @@ def replace_insights(
                 item["applies_to"],
                 item["limitation"],
                 item["evidence"],
+                evidence_ok,
+                matched,
+                round(score, 2),
                 theme,
                 "pending",
                 timestamp,

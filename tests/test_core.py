@@ -493,3 +493,46 @@ def test_build_messages_injects_vocabulary():
     assert "频域增强" in system and "原型学习" in system
     assert "{mechanism_list}" not in system
     assert "解读标题：T" in messages[1]["content"]
+
+
+def test_evidence_in_source_accepts_verbatim():
+    content = "本文把 Haar 小波换成可学习卷积，端到端训练。"
+    assert knowledge.evidence_in_source("把 Haar 小波换成可学习卷积", content)
+
+
+def test_evidence_in_source_ignores_whitespace_differences():
+    content = "本文把Haar小波换成可学习卷积"
+    assert knowledge.evidence_in_source("把 Haar  小波 换成", content)
+
+
+def test_evidence_in_source_rejects_paraphrase():
+    content = "引入原型对比学习，把特征解耦为一致性和特异性原型。"
+    # 典型的模型改写：把原文重组成"核心创新是……"
+    assert not knowledge.evidence_in_source(
+        "核心创新是引入原型对比学习解耦特征", content
+    )
+
+
+def test_evidence_in_source_rejects_too_short():
+    assert not knowledge.evidence_in_source("小波", "把小波换成卷积")
+
+
+def test_best_source_sentence_recovers_paraphrase():
+    content = (
+        "## 核心创新\n"
+        "现有方法在单一掩码损失监督下融合 RGB 和深度特征，导致两种模态收敛到同一空间。\n"
+        "本文引入原型对比学习，把特征解耦为一致性原型和特异性原型。"
+    )
+    paraphrased = "核心创新是引入原型对比学习把特征解耦为一致性原型与特异性原型"
+    sentence, score = knowledge.best_source_sentence(paraphrased, content)
+    assert "原型对比学习" in sentence
+    assert score >= 0.45
+
+
+def test_best_source_sentence_returns_empty_when_nothing_close():
+    content = "这是一段完全不相关的文字内容用于测试。"
+    sentence, score = knowledge.best_source_sentence(
+        "另一个完全不同的主题讲的是天气预报和台风路径", content
+    )
+    assert sentence == ""
+    assert score < 0.45

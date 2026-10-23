@@ -1353,6 +1353,15 @@ def knowledge_page(
         "LEFT JOIN insight_mechanisms im ON im.mechanism_uid = m.uid "
         "GROUP BY m.uid ORDER BY n DESC, m.name"
     )
+    # 还没抽取过的解读：按更新时间倒序，一次处理一篇
+    extractable = db.query(
+        "SELECT d.uid, d.title, d.updated_at, LENGTH(d.content) AS chars, "
+        "p.filename AS paper_filename "
+        "FROM drafts d LEFT JOIN papers p ON p.uid = d.paper_uid "
+        "WHERE d.kind='reading' AND d.content != '' "
+        "AND NOT EXISTS (SELECT 1 FROM insights i WHERE i.draft_uid = d.uid) "
+        "ORDER BY d.updated_at DESC"
+    )
     return render(
         request,
         "knowledge.html",
@@ -1366,6 +1375,7 @@ def knowledge_page(
         novelty_type=type,
         q=q,
         novelty_types=knowledge.NOVELTY_TYPES,
+        extractable=extractable,
         msg=msg,
     )
 
@@ -1458,15 +1468,16 @@ def knowledge_save(
 
 
 @app.post("/knowledge/draft/{draft_uid}/extract")
-def knowledge_extract(draft_uid: str):
+def knowledge_extract(draft_uid: str, back: str = Form(default="draft")):
+    target = "/knowledge" if back == "knowledge" else f"/draft/{draft_uid}"
     try:
         job_uid = jobs.start_insights(draft_uid, force=True)
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
-        return RedirectResponse(f"/draft/{draft_uid}?err={message}", status_code=303)
+        return RedirectResponse(f"{target}?err={message}", status_code=303)
     if job_uid is None:
-        return RedirectResponse(f"/draft/{draft_uid}?err=已有洞察，未重复抽取", status_code=303)
-    return RedirectResponse(f"/draft/{draft_uid}?msg=已排队抽取创新点", status_code=303)
+        return RedirectResponse(f"{target}?err=已有洞察，未重复抽取", status_code=303)
+    return RedirectResponse(f"{target}?msg=已排队抽取创新点", status_code=303)
 
 
 # ---------------------------------------------------------------- 设置

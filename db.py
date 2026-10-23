@@ -319,6 +319,9 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("assets", "page_no", "INTEGER NOT NULL DEFAULT 0"),
     ("drafts", "theme", "TEXT NOT NULL DEFAULT 'classic'"),
     ("drafts", "preset", "TEXT NOT NULL DEFAULT 'deep'"),
+    ("insights", "evidence_ok", "INTEGER NOT NULL DEFAULT 0"),
+    ("insights", "evidence_source", "TEXT NOT NULL DEFAULT ''"),
+    ("insights", "evidence_score", "REAL NOT NULL DEFAULT 0"),
 )
 
 
