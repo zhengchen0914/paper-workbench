@@ -9,11 +9,12 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 WORKBENCH_DIR = Path(__file__).resolve().parent
 DATA_DIR = WORKBENCH_DIR / "data"
@@ -245,6 +246,8 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=8000")
+    # 大 UPDATE 不再依赖系统临时目录（那条路径出过 CANTOPEN）
+    conn.execute("PRAGMA temp_store=MEMORY")
     return conn
 
 
@@ -335,8 +338,7 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
 
 
 def query(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-    with session() as conn:
-        rows = conn.execute(sql, params).fetchall()
+    rows = _retry(lambda conn: conn.execute(sql, params).fetchall())
     return [dict(row) for row in rows]
 
 
@@ -346,8 +348,28 @@ def one(sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
 
 
 def execute(sql: str, params: tuple[Any, ...] = ()) -> None:
-    with session() as conn:
-        conn.execute(sql, params)
+    _retry(lambda conn: conn.execute(sql, params))
+
+
+def _retry(action: Callable[[sqlite3.Connection], Any], *, attempts: int = 3) -> Any:
+    """执行一次读写；遇到 WAL 半损坏类的 CANTOPEN 时重连重试。
+
+    服务被强杀后，SQLite 偶尔会留下不完整的 -wal/-shm，第一次写入报
+    `unable to open database file`，重连一次即可自愈。重试只针对这一种错误，
+    其它异常照常抛出，不掩盖真实问题。
+    """
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            with session() as conn:
+                return action(conn)
+        except sqlite3.OperationalError as exc:
+            if "unable to open database file" not in str(exc):
+                raise
+            last = exc
+            time.sleep(0.2 * (attempt + 1))
+    assert last is not None
+    raise last
 
 
 def get_settings() -> dict[str, str]:
