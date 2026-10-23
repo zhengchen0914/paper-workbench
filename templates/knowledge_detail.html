@@ -60,18 +60,31 @@
 
   <aside class="kb-side">
     <div class="card">
-      <div class="card-head"><h2>机制标签</h2></div>
+      <div class="card-head">
+        <h2>机制标签</h2>
+        <a class="muted small" href="/mechanisms">管理机制卡 →</a>
+      </div>
       {% if item.mechanisms %}
-      <p class="tags">
+      <ul class="mech-list">
         {% for m in item.mechanisms %}
-        <span class="tag-chip" title="{{ m.variant_note }}">
-          {{ m.name }}{% if not m.verified %}<em class="unverified">待确认</em>{% endif %}
-        </span>
+        <li>
+          <span class="tag-chip">{{ m.name }}{% if not m.verified %}<em class="unverified">待确认</em>{% endif %}</span>
+          <form method="post" action="/knowledge/{{ item.uid }}/mechanisms/{{ m.uid }}/remove" class="inline">
+            <button class="mech-x" type="submit" title="移除这个标签">✕</button>
+          </form>
+        </li>
         {% endfor %}
-      </p>
+      </ul>
       {% else %}
       <p class="muted small">还没有机制标签。确认时会用于跨论文聚合。</p>
       {% endif %}
+      <form method="post" action="/knowledge/{{ item.uid }}/mechanisms/add" class="mech-add">
+        <input type="text" name="name" list="mech-options" placeholder="添加机制（可新建）">
+        <datalist id="mech-options">
+          {% for m in all_mechanisms %}<option value="{{ m.name }}">{% endfor %}
+        </datalist>
+        <button class="btn tiny" type="submit">添加</button>
+      </form>
     </div>
 
     <div class="card">

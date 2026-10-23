@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}机制卡 · 知识库{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div class="crumb"><a href="/knowledge">知识库</a> / 机制卡</div>
+  <h1>机制卡</h1>
+  <p class="sub">
+    {{ mechanisms | length }} 个机制 · 待确认 <strong>{{ pending }}</strong> 个 · 无引用 {{ orphan }} 个
+    <span class="muted">— 机制碎得越多，跨论文聚合越没用</span>
+  </p>
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<form method="post" action="/knowledge/mechanisms/merge" class="merge-bar">
+  <span class="merge-label">合并</span>
+  <select name="source">
+    <option value="">选一个机制…</option>
+    {% for m in mechanisms %}
+    <option value="{{ m.uid }}">{{ m.name }}（{{ m.n }} 条）</option>
+    {% endfor %}
+  </select>
+  <span class="muted">并入</span>
+  <select name="target">
+    <option value="">选目标机制…</option>
+    {% for m in mechanisms %}
+    <option value="{{ m.uid }}">{{ m.name }}（{{ m.n }} 条）</option>
+    {% endfor %}
+  </select>
+  <button class="btn primary" type="submit"
+          onclick="return confirm('合并会迁移所有引用并删除源机制，继续？')">执行合并</button>
+</form>
+<p class="hint">
+  合并用于同一件事的多种叫法（比如「原型相似度加权」并入「原型学习」）。
+  这比让它们各自成卡更有利于后续聚合。
+</p>
+
+<table class="table compact">
+  <thead>
+    <tr><th>机制</th><th class="num-col">引用</th><th>状态</th><th>操作</th></tr>
+  </thead>
+  <tbody>
+  {% for m in mechanisms %}
+    <tr>
+      <td>
+        <strong>{{ m.name }}</strong>
+        {% if m.definition %}<div class="muted small">{{ m.definition }}</div>{% endif %}
+      </td>
+      <td class="num-cell">{{ m.n }}</td>
+      <td>
+        {% if m.verified %}
+          <span class="pill ready">正式</span>
+        {% else %}
+          <span class="pill running">待确认</span>
+        {% endif %}
+      </td>
+      <td class="mech-actions">
+        {% if not m.verified %}
+        <form method="post" action="/knowledge/mechanisms/{{ m.uid }}/confirm" class="inline">
+          <button class="btn tiny primary" type="submit">确认</button>
+        </form>
+        {% endif %}
+        <details class="mech-edit">
+          <summary>改名/定义</summary>
+          <form method="post" action="/knowledge/mechanisms/{{ m.uid }}/rename" class="mech-edit-form">
+            <input type="text" name="name" value="{{ m.name }}">
+            <input type="text" name="definition" value="{{ m.definition }}" placeholder="一句话定义">
+            <button class="btn tiny" type="submit">保存</button>
+          </form>
+        </details>
+        {% if not m.n %}
+        <form method="post" action="/knowledge/mechanisms/{{ m.uid }}/delete" class="inline"
+              onsubmit="return confirm('删除这个没有任何引用的机制？')">
+          <button class="btn tiny ghost" type="submit">删除</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

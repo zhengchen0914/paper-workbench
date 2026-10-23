@@ -1417,6 +1417,7 @@ def knowledge_detail_page(request: Request, uid: str, msg: str = "") -> Response
         active="knowledge",
         item=row,
         novelty_types=knowledge.NOVELTY_TYPES,
+        all_mechanisms=db.query("SELECT uid, name FROM mechanisms ORDER BY verified, name"),
         msg=msg,
     )
 
@@ -1428,6 +1429,130 @@ def knowledge_verify(uid: str):
     )
     db.log_event(uid, "insight:verify", "")
     return RedirectResponse("/knowledge?msg=已确认", status_code=303)
+
+
+# ---------------------------------------------------------------- 机制卡维护
+
+
+@app.get("/mechanisms", response_class=HTMLResponse)
+def mechanisms_page(request: Request, msg: str = "") -> HTMLResponse:
+    rows = db.query(
+        "SELECT m.*, COUNT(im.insight_uid) AS n FROM mechanisms m "
+        "LEFT JOIN insight_mechanisms im ON im.mechanism_uid = m.uid "
+        "GROUP BY m.uid ORDER BY m.verified, n DESC, m.name"
+    )
+    return render(
+        request,
+        "mechanisms.html",
+        active="knowledge",
+        mechanisms=rows,
+        pending=sum(1 for row in rows if not row["verified"]),
+        orphan=sum(1 for row in rows if not row["n"]),
+        msg=msg,
+    )
+
+
+@app.post("/knowledge/mechanisms/{uid}/confirm")
+def mechanism_confirm(uid: str):
+    db.execute(
+        "UPDATE mechanisms SET verified=1 WHERE uid=?", (uid,)
+    )
+    db.log_event(uid, "mech:confirm", "")
+    return RedirectResponse("/mechanisms?msg=已确认为正式机制", status_code=303)
+
+
+@app.post("/knowledge/mechanisms/{uid}/rename")
+def mechanism_rename(uid: str, name: str = Form(default=""), definition: str = Form(default="")):
+    name = name.strip()
+    if not name:
+        return RedirectResponse("/mechanisms?msg=名称不能为空", status_code=303)
+    clash = db.one("SELECT uid FROM mechanisms WHERE name=? AND uid!=?", (name, uid))
+    if clash:
+        return RedirectResponse(
+            "/mechanisms?msg=已有同名机制，请改用「合并」", status_code=303
+        )
+    db.execute(
+        "UPDATE mechanisms SET name=?, definition=? WHERE uid=?",
+        (name, definition.strip(), uid),
+    )
+    return RedirectResponse("/mechanisms?msg=已保存", status_code=303)
+
+
+@app.post("/knowledge/mechanisms/merge")
+def mechanism_merge(source: str = Form(default=""), target: str = Form(default="")):
+    """把 source 的所有引用并到 target，然后删掉 source。"""
+    if not source or not target or source == target:
+        return RedirectResponse(
+            "/mechanisms?msg=请选择两个不同的机制", status_code=303
+        )
+    src = db.one("SELECT * FROM mechanisms WHERE uid=?", (source,))
+    dst = db.one("SELECT * FROM mechanisms WHERE uid=?", (target,))
+    if src is None or dst is None:
+        return RedirectResponse("/mechanisms?msg=机制不存在", status_code=303)
+
+    links = db.query(
+        "SELECT insight_uid, variant_note FROM insight_mechanisms WHERE mechanism_uid=?",
+        (source,),
+    )
+    for link in links:
+        db.execute(
+            "INSERT OR IGNORE INTO insight_mechanisms(insight_uid, mechanism_uid, "
+            "variant_note) VALUES(?,?,?)",
+            (link["insight_uid"], target, link["variant_note"] or ""),
+        )
+    db.execute("DELETE FROM insight_mechanisms WHERE mechanism_uid=?", (source,))
+    db.execute("DELETE FROM mechanisms WHERE uid=?", (source,))
+    db.log_event("mech", "merge", f"{src['name']} → {dst['name']}（{len(links)} 条引用）")
+    return RedirectResponse(
+        f"/mechanisms?msg=已把「{src['name']}」并入「{dst['name']}」，"
+        f"迁移 {len(links)} 条引用",
+        status_code=303,
+    )
+
+
+@app.post("/knowledge/mechanisms/{uid}/delete")
+def mechanism_delete(uid: str):
+    used = db.one(
+        "SELECT COUNT(*) AS n FROM insight_mechanisms WHERE mechanism_uid=?", (uid,)
+    )
+    if used and used["n"]:
+        return RedirectResponse(
+            f"/mechanisms?msg=还有 {used['n']} 条引用，请先合并再删", status_code=303
+        )
+    db.execute("DELETE FROM mechanisms WHERE uid=?", (uid,))
+    return RedirectResponse("/mechanisms?msg=已删除", status_code=303)
+
+
+@app.post("/knowledge/{uid}/mechanisms/add")
+def insight_mechanism_add(uid: str, name: str = Form(default="")):
+    name = name.strip()
+    if not name:
+        return RedirectResponse(f"/knowledge/{uid}?msg=机制名不能为空", status_code=303)
+    existing = db.one("SELECT uid FROM mechanisms WHERE name=?", (name,))
+    if existing is None:
+        mech_uid = db.new_uid("mech")
+        db.execute(
+            "INSERT INTO mechanisms(uid, name, definition, verified, created_at) "
+            "VALUES(?,?,?,?,?)",
+            (mech_uid, name, "", 0, db.now()),
+        )
+    else:
+        mech_uid = existing["uid"]
+    db.execute(
+        "INSERT OR IGNORE INTO insight_mechanisms(insight_uid, mechanism_uid, variant_note) "
+        "VALUES(?,?,?)",
+        (uid, mech_uid, ""),
+    )
+    return RedirectResponse(f"/knowledge/{uid}?msg=已添加机制标签", status_code=303)
+
+
+@app.post("/knowledge/{uid}/mechanisms/{mech_uid}/remove")
+def insight_mechanism_remove(uid: str, mech_uid: str):
+    db.execute(
+        "DELETE FROM insight_mechanisms WHERE insight_uid=? AND mechanism_uid=?",
+        (uid, mech_uid),
+    )
+    return RedirectResponse(f"/knowledge/{uid}?msg=已移除标签", status_code=303)
 
 
 @app.post("/knowledge/{uid}/reject")
