@@ -440,6 +440,17 @@ def _safe_back(back: str, default: str) -> str:
     return back if back.startswith("/") and not back.startswith("//") else default
 
 
+def _back_with(back: str, key: str, value: str, default: str = "/drafts") -> str:
+    """在回跳地址上追加参数。
+
+    不能用 f"{back}?{key}=..."：back 里可能已经有 ?kind=article，
+    拼出 /drafts?kind=article?msg=... 这种坏 URL，提示就丢了。
+    """
+    target = _safe_back(back, default)
+    joiner = "&" if "?" in target else "?"
+    return f"{target}{joiner}{key}={quote(value)}"
+
+
 @app.post("/draft/{uid}/reveal")
 def draft_reveal(uid: str, back: str = Form(default="/drafts")):
     draft = db.one("SELECT * FROM drafts WHERE uid=?", (uid,))
@@ -451,7 +462,7 @@ def draft_reveal(uid: str, back: str = Form(default="/drafts")):
         return RedirectResponse(f"/drafts?err=导出失败：{exc}", status_code=303)
     reveal_path(path)
     return RedirectResponse(
-        f"{_safe_back(back, '/drafts')}?msg=已导出到 exports/{quote(path.name)}",
+        _back_with(back, "msg", f"已导出到 exports/{path.name}"),
         status_code=303,
     )
 
@@ -460,9 +471,7 @@ def draft_reveal(uid: str, back: str = Form(default="/drafts")):
 def exports_open(back: str = Form(default="/drafts")):
     db.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     reveal_path(db.EXPORT_DIR)
-    return RedirectResponse(
-        f"{_safe_back(back, '/drafts')}?msg=已打开导出文件夹", status_code=303
-    )
+    return RedirectResponse(_back_with(back, "msg", "已打开导出文件夹"), status_code=303)
 
 
 # ---------------------------------------------------------------- 公众号文章
@@ -738,6 +747,19 @@ def export_package(uid: str) -> Response:
     bundle = article_bundle(uid)
     if bundle is None:
         return RedirectResponse("/drafts", status_code=303)
+    payload, filename = build_package(bundle)
+    disposition = (
+        f'attachment; filename="package.zip"; filename*=UTF-8\'\'{quote(filename)}'
+    )
+    return Response(
+        payload,
+        media_type="application/zip",
+        headers={"Content-Disposition": disposition},
+    )
+
+
+def build_package(bundle: dict[str, Any]) -> tuple[bytes, str]:
+    """打包交付物：正文 md/html + 物料.json + 配图。返回 (zip 字节, 文件名)。"""
     article = bundle["article"]
     theme = themes.get_theme(article["theme"])
     body_html = export.render_fragment(article["content"], theme.key)
@@ -774,13 +796,30 @@ def export_package(uid: str) -> Response:
                 bundle_zip.write(asset_path, arcname=f"图片/{asset_path.name}")
 
     filename = _safe_filename(article["title"] or "article") + ".zip"
-    disposition = (
-        f'attachment; filename="package.zip"; filename*=UTF-8\'\'{quote(filename)}'
-    )
-    return Response(
-        buffer.getvalue(),
-        media_type="application/zip",
-        headers={"Content-Disposition": disposition},
+    return buffer.getvalue(), filename
+
+
+@app.post("/article/{uid}/export-to-folder")
+def article_export_to_folder(uid: str):
+    """把交付包写到 data/exports 并打开文件夹——比浏览器静默下载更有反馈。"""
+    bundle = article_bundle(uid)
+    if bundle is None:
+        return RedirectResponse("/drafts?err=文章不存在", status_code=303)
+    article = bundle["article"]
+    try:
+        db.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        payload, filename = build_package(bundle)
+        zip_path = db.EXPORT_DIR / filename
+        zip_path.write_bytes(payload)
+        write_draft_file({**article, "kind": "article"})
+    except OSError as exc:
+        return RedirectResponse(
+            _back_with(f"/article/{uid}", "err", f"导出失败：{exc}"), status_code=303
+        )
+    reveal_path(zip_path)
+    return RedirectResponse(
+        _back_with(f"/article/{uid}", "msg", f"已导出到 exports/{zip_path.name}"),
+        status_code=303,
     )
 
 

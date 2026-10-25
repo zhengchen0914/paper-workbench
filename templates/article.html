@@ -149,13 +149,20 @@
   </form>
   {% endif %}
   <a class="btn" href="/article/{{ article.uid }}/export" target="_blank">打开粘贴页</a>
-  <a class="btn" href="/article/{{ article.uid }}/package.zip">下载交付包</a>
+  <form method="post" action="/article/{{ article.uid }}/export-to-folder" class="inline">
+    <button class="btn primary" type="submit" title="导出交付包与 HTML 到 data/exports 并打开文件夹">导出到文件夹</button>
+  </form>
+  <a class="btn ghost" href="/article/{{ article.uid }}/package.zip">下载交付包</a>
   <a class="btn ghost" href="/article/{{ article.uid }}/export.md">下载 Markdown</a>
   <a class="btn ghost" href="/draft/{{ article.uid }}">编辑正文</a>
   <form method="post" action="/article/{{ article.uid }}/repackage" class="inline">
     <button class="btn ghost" type="submit">重新生成物料</button>
   </form>
 </section>
+<p class="hint">
+  「导出到文件夹」会把交付包和 HTML 写到 <code>data/exports/</code> 并在资源管理器中定位，能立刻看到结果。
+  两个「下载」走浏览器默认下载目录（通常是「下载」文件夹），页面不会有提示。
+</p>
 
 <section class="block">
   <div class="block-head">
