@@ -8,7 +8,7 @@
     <a href="/mechanisms">机制卡</a> /
     {{ mech.name }}
   </div>
-  <h1>{{ mech.name }}</h1>
+  <h1>{{ mech.name }}{% if mech.name_en %}<span class="mech-en-big">{{ mech.name_en }}</span>{% endif %}</h1>
   <p class="sub">
     <span class="pill {{ 'ready' if mech.verified else 'running' }}">
       {{ '正式机制' if mech.verified else '待确认' }}
@@ -32,7 +32,7 @@
   </div>
   <p class="tags">
     {% for c in cooccurring %}
-    <a class="tag-chip" href="/mechanisms/{{ c.uid }}">{{ c.name }} · {{ c.n }}</a>
+    <a class="tag-chip" href="/mechanisms/{{ c.uid }}">{{ c.name }}{% if c.name_en %} <span class="tag-en">{{ c.name_en }}</span>{% endif %} · {{ c.n }}</a>
     {% endfor %}
   </p>
 </section>

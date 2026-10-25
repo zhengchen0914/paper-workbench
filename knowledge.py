@@ -18,40 +18,44 @@ from typing import Any
 import db
 
 # 受控机制词表。新增机制必须先人工确认，避免碎片化。
-MECHANISM_PRESETS: tuple[tuple[str, str], ...] = (
-    ("频域增强", "在频率域处理特征，利用高低频分离来强化细节或抑制噪声"),
-    ("小波变换", "用小波分解把特征拆成多尺度子带"),
-    ("原型学习", "学习一组语义原型来聚合或过滤特征"),
-    ("掩码注意力", "用预测掩码约束注意力作用范围"),
-    ("交叉注意力", "在两个特征序列之间做注意力交互"),
-    ("自注意力", "同一序列内部建模长程依赖"),
-    ("扩散重建", "用扩散过程做重建式异常判别"),
-    ("生成式合成", "用生成模型合成异常样本做训练"),
-    ("知识蒸馏", "用教师模型指导学生模型"),
-    ("对比学习", "用正负样本对拉近或推远表示"),
-    ("自监督预训练", "用代理任务从无标注数据学表示"),
-    ("记忆库", "显式存储正常样本特征供检索比对"),
-    ("特征金字塔", "多尺度特征融合"),
-    ("多尺度融合", "跨尺度信息聚合"),
-    ("提示学习", "用可学习提示词适配下游任务"),
-    ("视觉语言对齐", "对齐图像与文本表示"),
-    ("零样本迁移", "不依赖目标类别的训练样本"),
-    ("弱监督", "用图像级标签等弱标注训练"),
-    ("半监督", "少量标注加大量无标注"),
-    ("合成异常", "人工构造异常样本"),
-    ("重建式检测", "以重建误差作为异常分数"),
-    ("判别式检测", "直接训练分类或判别网络"),
-    ("学生教师模型", "教师网络与学生网络的输出差异"),
-    ("归一化流", "用可逆变换建模分布"),
-    ("图神经网络", "在图结构上传播信息"),
-    ("3D点云", "在点云数据上做检测或分割"),
-    ("时序建模", "建模时间维度的依赖"),
-    ("不确定性估计", "输出预测的置信度或方差"),
-    ("边界感知", "显式建模目标边界"),
-    ("轻量化设计", "以参数量或计算量为主要优化目标"),
+# 受控机制词表：(中文名, 英文名, 定义)。
+# 英文名是原始文献里的通行叫法，中文名有时是模型意译，可能不准确——
+# 所以界面上中英并列，判断以英文为准。新增机制必须先人工确认，避免碎片化。
+MECHANISM_PRESETS: tuple[tuple[str, str, str], ...] = (
+    ("频域增强", "Frequency-Domain Enhancement", "在频率域处理特征，利用高低频分离来强化细节或抑制噪声"),
+    ("小波变换", "Wavelet Transform", "用小波分解把特征拆成多尺度子带"),
+    ("原型学习", "Prototype Learning", "学习一组语义原型来聚合或过滤特征"),
+    ("掩码注意力", "Masked Attention", "用预测掩码约束注意力作用范围"),
+    ("交叉注意力", "Cross-Attention", "在两个特征序列之间做注意力交互"),
+    ("自注意力", "Self-Attention", "同一序列内部建模长程依赖"),
+    ("扩散重建", "Diffusion Reconstruction", "用扩散过程做重建式异常判别"),
+    ("生成式合成", "Generative Synthesis", "用生成模型合成异常样本做训练"),
+    ("知识蒸馏", "Knowledge Distillation", "用教师模型指导学生模型"),
+    ("对比学习", "Contrastive Learning", "用正负样本对拉近或推远表示"),
+    ("自监督预训练", "Self-Supervised Pre-Training", "用代理任务从无标注数据学表示"),
+    ("记忆库", "Memory Bank", "显式存储正常样本特征供检索比对"),
+    ("特征金字塔", "Feature Pyramid", "多尺度特征融合"),
+    ("多尺度融合", "Multi-Scale Fusion", "跨尺度信息聚合"),
+    ("提示学习", "Prompt Learning", "用可学习提示词适配下游任务"),
+    ("视觉语言对齐", "Vision-Language Alignment", "对齐图像与文本表示"),
+    ("零样本迁移", "Zero-Shot Transfer", "不依赖目标类别的训练样本"),
+    ("弱监督", "Weak Supervision", "用图像级标签等弱标注训练"),
+    ("半监督", "Semi-Supervised Learning", "少量标注加大量无标注"),
+    ("合成异常", "Synthetic Anomaly Generation", "人工构造异常样本"),
+    ("重建式检测", "Reconstruction-Based Detection", "以重建误差作为异常分数"),
+    ("判别式检测", "Discriminative Detection", "直接训练分类或判别网络"),
+    ("学生教师模型", "Student-Teacher Model", "教师网络与学生网络的输出差异"),
+    ("归一化流", "Normalizing Flow", "用可逆变换建模分布"),
+    ("图神经网络", "Graph Neural Network", "在图结构上传播信息"),
+    ("3D点云", "3D Point Cloud", "在点云数据上做检测或分割"),
+    ("时序建模", "Temporal Modeling", "建模时间维度的依赖"),
+    ("不确定性估计", "Uncertainty Estimation", "输出预测的置信度或方差"),
+    ("边界感知", "Boundary-Aware Modeling", "显式建模目标边界"),
+    ("轻量化设计", "Lightweight Design", "以参数量或计算量为主要优化目标"),
 )
 
-MECHANISM_NAMES = tuple(name for name, _ in MECHANISM_PRESETS)
+MECHANISM_NAMES = tuple(name for name, _, _ in MECHANISM_PRESETS)
+MECHANISM_GLOSSARY = {name: name_en for name, name_en, _ in MECHANISM_PRESETS}
 
 NOVELTY_TYPES = ("架构", "表示", "损失", "训练策略", "数据", "评测")
 
@@ -73,7 +77,7 @@ INSIGHT_SYSTEM = """你是计算机视觉领域的研究者，任务是把一篇
       "mechanism": "核心机制，2-3 句，讲清输入输出与关键设计",
       "novelty_type": "架构 | 表示 | 损失 | 训练策略 | 数据 | 评测 六选一",
       "mechanisms": ["从受控词表选，1-3 个"],
-      "new_mechanisms": [{"name": "词表里没有但确实关键的机制", "definition": "一句话定义"}],
+      "new_mechanisms": [{"name": "中文名（4-8 字）", "name_en": "论文里的英文原名", "definition": "一句话定义"}],
       "applies_to": "适用场景，一句话",
       "limitation": "这条创新点自身的局限；解读没写就留空字符串",
       "evidence": "从解读原文里摘一句 20-80 字的原话作为依据"
@@ -90,7 +94,9 @@ INSIGHT_SYSTEM = """你是计算机视觉领域的研究者，任务是把一篇
 4. **词表里没有真正匹配的，就留空数组 `[]`，同时把真实机制写进 `new_mechanisms`。**
    禁止"挑一个最接近的凑数"——把「主元素二值化」标成「小波变换」，比留空更糟，
    因为它会污染机制卡的聚合。宁可空着，也不要错标。
-5. `new_mechanisms` 最多 2 个，名字用 4–8 个字的技术名词，definition 一句话。
+5. `new_mechanisms` 最多 2 个：`name` 是 4–8 字中文名，`name_en` 必须是**论文原文里的英文术语**
+   （不要自己翻译，照抄论文公式或方法名里的写法），definition 一句话。中文名译错很常见，
+   英文名用来校正，所以宁可英文名长一点也要准确。
 6. `evidence` 必须从解读原文**逐字复制**一段连续文字（20–80 字），不能改写、不能总结。
    如果找不到能逐字复制的句子，就把 `evidence` 留空字符串——**留空比改写强**，
    因为改写的"引文"会让复核失去意义。
@@ -101,7 +107,8 @@ INSIGHT_SYSTEM = """你是计算机视觉领域的研究者，任务是把一篇
 
 def build_messages(reading: dict[str, Any], paper: dict[str, Any] | None) -> list[dict[str, str]]:
     """解读 → 抽取请求。"""
-    system = INSIGHT_SYSTEM.replace("{mechanism_list}", "、".join(MECHANISM_NAMES))
+    glossary = "、".join(f"{zh}（{en}）" for zh, en, _ in MECHANISM_PRESETS)
+    system = INSIGHT_SYSTEM.replace("{mechanism_list}", glossary)
 
     hints = [f"解读标题：{reading.get('title', '')}"]
     if paper:
@@ -158,7 +165,11 @@ def parse_insights(raw: str) -> list[dict[str, Any]]:
             name = _text(extra.get("name"))
             if name and name not in MECHANISM_NAMES:
                 new_mechanisms.append(
-                    {"name": name, "definition": _text(extra.get("definition"))}
+                    {
+                        "name": name,
+                        "name_en": _text(extra.get("name_en"))[:120],
+                        "definition": _text(extra.get("definition")),
+                    }
                 )
         novelty = _text(item.get("novelty_type"))
         cleaned.append(
@@ -231,13 +242,18 @@ def ensure_mechanisms() -> None:
     """把受控词表写进 mechanisms 表（幂等）。预置项 verified=1。"""
     existing = {row["name"] for row in db.query("SELECT name FROM mechanisms")}
     timestamp = db.now()
-    for name, definition in MECHANISM_PRESETS:
+    for name, name_en, definition in MECHANISM_PRESETS:
         if name in existing:
+            # 老库里没有英文名，顺手补齐（只在为空时写，不覆盖用户改过的）
+            db.execute(
+                "UPDATE mechanisms SET name_en=? WHERE name=? AND (name_en IS NULL OR name_en='')",
+                (name_en, name),
+            )
             continue
         db.execute(
-            "INSERT INTO mechanisms(uid, name, definition, verified, created_at) "
-            "VALUES(?,?,?,?,?)",
-            (db.new_uid("mech"), name, definition, 1, timestamp),
+            "INSERT INTO mechanisms(uid, name, name_en, definition, verified, created_at) "
+            "VALUES(?,?,?,?,?,?)",
+            (db.new_uid("mech"), name, name_en, definition, 1, timestamp),
         )
 
 
@@ -302,9 +318,16 @@ def replace_insights(
         for extra in item.get("new_mechanisms", []):
             mech_uid = db.new_uid("mech")
             db.execute(
-                "INSERT OR IGNORE INTO mechanisms(uid, name, definition, verified, created_at) "
-                "VALUES(?,?,?,?,?)",
-                (mech_uid, extra["name"], extra["definition"], 0, timestamp),
+                "INSERT OR IGNORE INTO mechanisms(uid, name, name_en, definition, verified, created_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    mech_uid,
+                    extra["name"],
+                    extra.get("name_en", ""),
+                    extra["definition"],
+                    0,
+                    timestamp,
+                ),
             )
             row = db.one("SELECT uid FROM mechanisms WHERE name=?", (extra["name"],))
             if row:

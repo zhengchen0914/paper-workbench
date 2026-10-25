@@ -3,6 +3,8 @@
 这些都不依赖模型接口，是每次改动都必须跑通的最低门槛。
 """
 
+import json
+
 import export
 import github_boards
 import knowledge
@@ -448,8 +450,44 @@ def test_parse_insights_keeps_only_vocabulary_mechanisms():
 def test_parse_insights_marks_new_mechanisms():
     items = knowledge.parse_insights(SAMPLE_INSIGHTS)
     assert items[0]["new_mechanisms"] == [
-        {"name": "自适应子带选择", "definition": "按样本动态选子带"}
+        {"name": "自适应子带选择", "name_en": "", "definition": "按样本动态选子带"}
     ]
+
+
+def test_parse_insights_keeps_english_name_of_new_mechanism():
+    payload = json.dumps(
+        {
+            "insights": [
+                {
+                    "title": "用 MEBin 自适应二值化提取异常区域",
+                    "problem": "固定阈值在工业多尺度缺陷上不稳定",
+                    "mechanism": "全阈值采样后按区域稳定性统计选阈值",
+                    "novelty_type": "数据",
+                    "mechanisms": [],
+                    "new_mechanisms": [
+                        {
+                            "name": "主元素二值化",
+                            "name_en": "MEBin (Main-Element Binarization)",
+                            "definition": "自适应阈值分割",
+                        }
+                    ],
+                    "applies_to": "工业缺陷分割",
+                    "limitation": "",
+                    "evidence": "全阈值采样后按区域稳定性统计选阈值",
+                }
+            ]
+        },
+        ensure_ascii=False,
+    )
+    items = knowledge.parse_insights(payload)
+    assert items[0]["new_mechanisms"][0]["name_en"] == "MEBin (Main-Element Binarization)"
+
+
+def test_preset_vocabulary_is_bilingual():
+    for name, name_en, definition in knowledge.MECHANISM_PRESETS:
+        assert name and name_en and definition
+        # 英文名必须是 ASCII，防止把中文填进英文列
+        assert name_en.isascii(), name_en
 
 
 def test_parse_insights_drops_bad_novelty_type():

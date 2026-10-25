@@ -1349,7 +1349,7 @@ def knowledge_page(
         for row in db.query("SELECT status, COUNT(*) AS n FROM insights GROUP BY status")
     }
     mechanisms = db.query(
-        "SELECT m.name, m.verified, COUNT(im.insight_uid) AS n FROM mechanisms m "
+        "SELECT m.name, m.name_en, m.verified, COUNT(im.insight_uid) AS n FROM mechanisms m "
         "LEFT JOIN insight_mechanisms im ON im.mechanism_uid = m.uid "
         "GROUP BY m.uid ORDER BY n DESC, m.name"
     )
@@ -1396,7 +1396,7 @@ def insight_detail(uid: str) -> dict[str, Any] | None:
     if row is None:
         return None
     row["mechanisms"] = db.query(
-        "SELECT m.uid, m.name, m.verified, im.variant_note FROM insight_mechanisms im "
+        "SELECT m.uid, m.name, m.name_en, m.verified, im.variant_note FROM insight_mechanisms im "
         "JOIN mechanisms m ON m.uid = im.mechanism_uid WHERE im.insight_uid = ? "
         "ORDER BY m.name",
         (uid,),
@@ -1476,7 +1476,7 @@ def graph_data(min_refs: int = 1, include_papers: int = 1) -> dict[str, Any]:
     力导向在前端跑完全够；不需要后端算布局。
     """
     mechanisms = db.query(
-        "SELECT m.uid, m.name, m.verified, "
+        "SELECT m.uid, m.name, m.name_en, m.verified, "
         "(SELECT COUNT(*) FROM insight_mechanisms im WHERE im.mechanism_uid = m.uid) AS refs "
         "FROM mechanisms m ORDER BY refs DESC"
     )
@@ -1511,6 +1511,7 @@ def graph_data(min_refs: int = 1, include_papers: int = 1) -> dict[str, Any]:
             {
                 "id": mech["uid"],
                 "label": mech["name"],
+                "label_en": mech["name_en"],
                 "type": "mechanism",
                 "size": 5 + min(14, int(mech["refs"]) * 1.1),
                 "refs": int(mech["refs"]),
@@ -1588,7 +1589,7 @@ def mechanism_detail_page(request: Request, uid: str, msg: str = "") -> Response
 
     # 共现机制：经常和它一起标在同一条创新点里的其他机制
     co = db.query(
-        "SELECT m2.uid, m2.name, COUNT(*) AS n FROM insight_mechanisms a "
+        "SELECT m2.uid, m2.name, m2.name_en, COUNT(*) AS n FROM insight_mechanisms a "
         "JOIN insight_mechanisms b ON b.insight_uid = a.insight_uid "
         "AND b.mechanism_uid != a.mechanism_uid "
         "JOIN mechanisms m2 ON m2.uid = b.mechanism_uid "
@@ -1648,7 +1649,12 @@ def mechanism_confirm(uid: str):
 
 
 @app.post("/knowledge/mechanisms/{uid}/rename")
-def mechanism_rename(uid: str, name: str = Form(default=""), definition: str = Form(default="")):
+def mechanism_rename(
+    uid: str,
+    name: str = Form(default=""),
+    name_en: str = Form(default=""),
+    definition: str = Form(default=""),
+):
     name = name.strip()
     if not name:
         return RedirectResponse("/mechanisms?msg=名称不能为空", status_code=303)
@@ -1658,8 +1664,8 @@ def mechanism_rename(uid: str, name: str = Form(default=""), definition: str = F
             "/mechanisms?msg=已有同名机制，请改用「合并」", status_code=303
         )
     db.execute(
-        "UPDATE mechanisms SET name=?, definition=? WHERE uid=?",
-        (name, definition.strip(), uid),
+        "UPDATE mechanisms SET name=?, name_en=?, definition=? WHERE uid=?",
+        (name, name_en.strip(), definition.strip(), uid),
     )
     return RedirectResponse("/mechanisms?msg=已保存", status_code=303)
 

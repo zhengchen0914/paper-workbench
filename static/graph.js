@@ -135,7 +135,9 @@ window.addEventListener("error", (event) => {
 
       const text = document.createElementNS(SVG_NS, "text");
       text.setAttribute("dy", node.size + 11);
-      text.textContent = trim(node.label, node.type === "insight" ? 12 : 16);
+      // 机制优先显示英文名：中文译名是模型意译，英文才是文献里的原始叫法
+      const shown = node.type === "mechanism" && node.label_en ? node.label_en : node.label;
+      text.textContent = trim(shown, node.type === "insight" ? 12 : 20);
       // 只常显「被 3 条以上引用」的机制名；创新点与论文名悬停才显示，
       // 否则 68 个机制 + 30 个长论文名会把画面糊死
       const minor =
@@ -179,9 +181,13 @@ window.addEventListener("error", (event) => {
   function focus(node) {
     state.highlight = node ? neighbors(node) : null;
     if (node) {
+      const bilingual =
+        node.label_en && node.label_en !== node.label
+          ? `${node.label} · ${node.label_en}`
+          : node.label;
       el.tooltip.textContent = node.type === "insight"
         ? node.label
-        : `${node.label}${node.refs ? `（${node.refs} 条创新点）` : ""}${node.count ? `（${node.count} 条）` : ""}`;
+        : `${bilingual}${node.refs ? `（${node.refs} 条创新点）` : ""}${node.count ? `（${node.count} 条）` : ""}`;
       el.tooltip.classList.add("on");
     } else {
       el.tooltip.classList.remove("on");

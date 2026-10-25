@@ -706,3 +706,17 @@ fieldset input { margin-bottom: 4px; }
 
 
 
+
+/* 机制中英对照 */
+.mech-en {
+  font-size: 11.5px; color: var(--accent); letter-spacing: 0.2px;
+  margin-top: 2px; font-weight: 500;
+}
+.mech-en-big {
+  font-size: 15px; font-weight: 500; color: var(--muted);
+  margin-left: 12px; letter-spacing: 0.3px;
+}
+.tag-en {
+  font-size: 10.5px; color: var(--muted); margin-left: 4px;
+  font-style: normal; font-weight: 400;
+}

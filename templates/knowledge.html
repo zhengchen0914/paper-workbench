@@ -99,7 +99,7 @@
       <option value="">全部</option>
       {% for m in mechanisms %}
         {% if m.n %}
-        <option value="{{ m.name }}" {{ 'selected' if m.name == mechanism else '' }}>{{ m.name }}（{{ m.n }}）</option>
+        <option value="{{ m.name }}" {{ 'selected' if m.name == mechanism else '' }}>{{ m.name }}{% if m.name_en %} / {{ m.name_en }}{% endif %}（{{ m.n }}）</option>
         {% endif %}
       {% endfor %}
     </select>

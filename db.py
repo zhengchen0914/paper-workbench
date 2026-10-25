@@ -327,6 +327,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("insights", "evidence_score", "REAL NOT NULL DEFAULT 0"),
     # 待抽取队列里的「忽略」：跳过这篇，不再自动抽取
     ("drafts", "extract_skip", "INTEGER NOT NULL DEFAULT 0"),
+    # 机制英文名：中文译名常是模型意译，英文原名才准
+    ("mechanisms", "name_en", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

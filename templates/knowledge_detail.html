@@ -68,7 +68,7 @@
       <ul class="mech-list">
         {% for m in item.mechanisms %}
         <li>
-          <span class="tag-chip">{{ m.name }}{% if not m.verified %}<em class="unverified">待确认</em>{% endif %}</span>
+          <span class="tag-chip">{{ m.name }}{% if m.name_en %}<span class="tag-en">{{ m.name_en }}</span>{% endif %}{% if not m.verified %}<em class="unverified">待确认</em>{% endif %}</span>
           <form method="post" action="/knowledge/{{ item.uid }}/mechanisms/{{ m.uid }}/remove" class="inline">
             <button class="mech-x" type="submit" title="移除这个标签">✕</button>
           </form>

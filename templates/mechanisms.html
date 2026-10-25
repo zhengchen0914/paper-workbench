@@ -28,14 +28,14 @@
   <select name="source">
     <option value="">选一个机制…</option>
     {% for m in mechanisms %}
-    <option value="{{ m.uid }}">{{ m.name }}（{{ m.n }} 条）</option>
+    <option value="{{ m.uid }}">{{ m.name }}{% if m.name_en %} / {{ m.name_en }}{% endif %}（{{ m.n }} 条）</option>
     {% endfor %}
   </select>
   <span class="muted">并入</span>
   <select name="target">
     <option value="">选目标机制…</option>
     {% for m in mechanisms %}
-    <option value="{{ m.uid }}">{{ m.name }}（{{ m.n }} 条）</option>
+    <option value="{{ m.uid }}">{{ m.name }}{% if m.name_en %} / {{ m.name_en }}{% endif %}（{{ m.n }} 条）</option>
     {% endfor %}
   </select>
   <button class="btn primary" type="submit"
@@ -55,6 +55,7 @@
     <tr>
       <td>
         <a href="/mechanisms/{{ m.uid }}"><strong>{{ m.name }}</strong></a>
+        {% if m.name_en %}<div class="mech-en">{{ m.name_en }}</div>{% endif %}
         {% if m.definition %}<div class="muted small">{{ m.definition }}</div>{% endif %}
       </td>
       <td class="num-cell">
@@ -76,7 +77,8 @@
         <details class="mech-edit">
           <summary>改名/定义</summary>
           <form method="post" action="/knowledge/mechanisms/{{ m.uid }}/rename" class="mech-edit-form">
-            <input type="text" name="name" value="{{ m.name }}">
+            <input type="text" name="name" value="{{ m.name }}" placeholder="中文名">
+            <input type="text" name="name_en" value="{{ m.name_en }}" placeholder="English name">
             <input type="text" name="definition" value="{{ m.definition }}" placeholder="一句话定义">
             <button class="btn tiny" type="submit">保存</button>
           </form>
