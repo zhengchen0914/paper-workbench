@@ -1514,7 +1514,7 @@ def graph_data(min_refs: int = 1, include_papers: int = 1) -> dict[str, Any]:
                 "type": "mechanism",
                 "size": 5 + min(14, int(mech["refs"]) * 1.1),
                 "refs": int(mech["refs"]),
-                "url": "/mechanisms",
+                "url": f"/mechanisms/{mech['uid']}",
             }
         )
 
@@ -1565,6 +1565,47 @@ def graph_data(min_refs: int = 1, include_papers: int = 1) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------- 机制卡维护
+
+
+@app.get("/mechanisms/{uid}", response_class=HTMLResponse)
+def mechanism_detail_page(request: Request, uid: str, msg: str = "") -> Response:
+    """单个机制的详情：它下面挂了哪些具体创新点、和哪些机制常一起出现。"""
+    mech = db.one("SELECT * FROM mechanisms WHERE uid=?", (uid,))
+    if mech is None:
+        return RedirectResponse("/mechanisms?msg=机制不存在", status_code=303)
+
+    rows = db.query(
+        "SELECT i.*, d.title AS paper_title, p.filename AS paper_filename "
+        "FROM insights i JOIN insight_mechanisms im ON im.insight_uid = i.uid "
+        "LEFT JOIN drafts d ON d.uid = i.draft_uid "
+        "LEFT JOIN papers p ON p.uid = i.paper_uid "
+        "WHERE im.mechanism_uid = ? AND i.status != 'rejected' "
+        "ORDER BY d.updated_at DESC, i.ordinal",
+        (uid,),
+    )
+    for row in rows:
+        row["evidence_ok"] = int(row.get("evidence_ok") or 0)
+
+    # 共现机制：经常和它一起标在同一条创新点里的其他机制
+    co = db.query(
+        "SELECT m2.uid, m2.name, COUNT(*) AS n FROM insight_mechanisms a "
+        "JOIN insight_mechanisms b ON b.insight_uid = a.insight_uid "
+        "AND b.mechanism_uid != a.mechanism_uid "
+        "JOIN mechanisms m2 ON m2.uid = b.mechanism_uid "
+        "WHERE a.mechanism_uid = ? GROUP BY m2.uid ORDER BY n DESC, m2.name LIMIT 12",
+        (uid,),
+    )
+
+    return render(
+        request,
+        "mechanism_detail.html",
+        active="knowledge",
+        mech=mech,
+        groups=group_by_paper(rows),
+        total=len(rows),
+        cooccurring=co,
+        msg=msg,
+    )
 
 
 @app.get("/mechanisms", response_class=HTMLResponse)

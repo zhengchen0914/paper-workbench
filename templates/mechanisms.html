@@ -54,10 +54,12 @@
   {% for m in mechanisms %}
     <tr>
       <td>
-        <strong>{{ m.name }}</strong>
+        <a href="/mechanisms/{{ m.uid }}"><strong>{{ m.name }}</strong></a>
         {% if m.definition %}<div class="muted small">{{ m.definition }}</div>{% endif %}
       </td>
-      <td class="num-cell">{{ m.n }}</td>
+      <td class="num-cell">
+        {% if m.n %}<a href="/mechanisms/{{ m.uid }}">{{ m.n }}</a>{% else %}0{% endif %}
+      </td>
       <td>
         {% if m.verified %}
           <span class="pill ready">正式</span>

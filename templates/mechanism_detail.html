@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ mech.name }} · 机制卡{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div class="crumb">
+    <a href="/knowledge">知识库</a> /
+    <a href="/mechanisms">机制卡</a> /
+    {{ mech.name }}
+  </div>
+  <h1>{{ mech.name }}</h1>
+  <p class="sub">
+    <span class="pill {{ 'ready' if mech.verified else 'running' }}">
+      {{ '正式机制' if mech.verified else '待确认' }}
+    </span>
+    <span class="muted">{{ total }} 条创新点用到它</span>
+    <a class="btn tiny ghost" href="/mechanisms">← 返回机制卡</a>
+    <a class="btn tiny ghost" href="/graph">在图谱里看</a>
+  </p>
+  {% if mech.definition %}
+  <p class="mech-def">{{ mech.definition }}</p>
+  {% endif %}
+</div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+{% if cooccurring %}
+<section class="block">
+  <div class="block-head">
+    <h2>常与这些机制同时出现</h2>
+    <span class="muted small">同一条创新点里被一起标注</span>
+  </div>
+  <p class="tags">
+    {% for c in cooccurring %}
+    <a class="tag-chip" href="/mechanisms/{{ c.uid }}">{{ c.name }} · {{ c.n }}</a>
+    {% endfor %}
+  </p>
+</section>
+{% endif %}
+
+{% if groups %}
+{% for g in groups %}
+<section class="kb-group">
+  <div class="kb-group-head">
+    <h2>{{ g.title }}</h2>
+    <span class="muted small">{{ g.entries | length }} 条</span>
+  </div>
+  {% for it in g.entries %}
+  <article class="insight-card">
+    <div class="insight-top">
+      {% if it.novelty_type %}<span class="type-chip">{{ it.novelty_type }}</span>{% endif %}
+      <a class="insight-title" href="/knowledge/{{ it.uid }}">{{ it.title }}</a>
+    </div>
+    <dl class="insight-body">
+      {% if it.problem %}<dt>旧问题</dt><dd>{{ it.problem }}</dd>{% endif %}
+      {% if it.mechanism %}<dt>机制</dt><dd>{{ it.mechanism }}</dd>{% endif %}
+      {% if it.evidence %}
+      <dt>原文依据</dt>
+      <dd class="evidence">
+        {% if not it.evidence_ok %}<span class="ev-warn">模型改写</span>{% endif %}{{ it.evidence }}
+      </dd>
+      {% endif %}
+    </dl>
+    <div class="insight-actions">
+      <a class="btn tiny ghost" href="/knowledge/{{ it.uid }}">打开条目</a>
+      {% if it.draft_uid %}<a class="btn tiny ghost" href="/draft/{{ it.draft_uid }}">看原文解读</a>{% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endfor %}
+{% else %}
+<section class="empty">
+  <p>这个机制还没有关联任何创新点。</p>
+  <p class="big">可以在条目详情页里手动给它打标签。</p>
+</section>
+{% endif %}
+
+{% endblock %}

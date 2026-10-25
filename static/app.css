@@ -687,6 +687,16 @@ fieldset input { margin-bottom: 4px; }
 }
 .graph-tip.on { opacity: 1; }
 
+/* 机制详情页 */
+.mech-def {
+  margin: 10px 0 0; padding: 10px 14px; max-width: 760px;
+  background: var(--surface); border-left: 3px solid var(--accent);
+  border-radius: 6px; font-size: 13.5px; line-height: 1.8; color: var(--ink-soft);
+}
+.tags .tag-chip { text-decoration: none; }
+.tags .tag-chip:hover { background: var(--accent); color: #fff; }
+
+
 
 
 
