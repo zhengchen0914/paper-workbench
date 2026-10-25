@@ -1465,7 +1465,7 @@ def graph_page(request: Request) -> HTMLResponse:
         "mechanisms": db.one("SELECT COUNT(*) AS n FROM mechanisms")["n"],
         "papers": db.one("SELECT COUNT(DISTINCT draft_uid) AS n FROM insights")["n"],
     }
-    return render(request, "graph.html", active="knowledge", counts=counts)
+    return render(request, "graph.html", active="graph", counts=counts)
 
 
 @app.get("/graph/data")
