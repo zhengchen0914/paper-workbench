@@ -12,6 +12,8 @@ import io
 import json
 import re
 import shutil
+import subprocess
+import sys
 import zipfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -374,13 +376,93 @@ def save_draft(uid: str, content: str = Form(default=""), title: str = Form(defa
 
 
 @app.get("/drafts", response_class=HTMLResponse)
-def drafts_list(request: Request, kind: str = "reading") -> HTMLResponse:
+def drafts_list(request: Request, kind: str = "reading", msg: str = "", err: str = "") -> HTMLResponse:
     rows = db.query(
         "SELECT d.*, p.filename FROM drafts d LEFT JOIN papers p ON p.uid = d.paper_uid "
         "WHERE d.kind=? AND d.status != 'empty' ORDER BY d.updated_at DESC",
         (kind,),
     )
-    return render(request, "drafts.html", active="drafts", drafts=rows, kind=kind)
+    return render(
+        request, "drafts.html", active="drafts", drafts=rows, kind=kind, msg=msg, err=err
+    )
+
+
+# ---------------------------------------------------------------- 导出到本地文件夹
+
+_BAD_FILENAME = re.compile(r'[\\/:*?"<>|\r\n\t]+')
+
+
+def _safe_filename(text: str, fallback: str = "draft") -> str:
+    cleaned = _BAD_FILENAME.sub("_", (text or "").strip()).strip(" .")
+    return (cleaned or fallback)[:80]
+
+
+def write_draft_file(draft: dict[str, Any]) -> Path:
+    """把稿件写成磁盘文件，返回路径。
+
+    解读存 .md（带 BOM，Windows 记事本打开中文不乱码）；
+    公众号文章额外存一份自包含 .html，双击就能看排版效果。
+    """
+    db.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    title = _safe_filename(draft.get("title") or draft["uid"])
+    content = draft.get("content") or ""
+    if draft.get("kind") == "article":
+        body = export.render_fragment(content, draft.get("theme") or "classic")
+        page = export.standalone_page(
+            title=draft.get("title") or "未命名文章",
+            body_html=body,
+            meta={"theme": draft.get("theme") or "classic"},
+        )
+        path = db.EXPORT_DIR / f"{title}.html"
+        path.write_text(page, encoding="utf-8")
+        return path
+    path = db.EXPORT_DIR / f"{title}.md"
+    path.write_text(content, encoding="utf-8-sig")
+    return path
+
+
+def reveal_path(path: Path) -> None:
+    """在系统文件管理器里定位到该文件。"""
+    target = str(path)
+    try:
+        if sys.platform.startswith("win"):
+            subprocess.Popen(["explorer", f"/select,{target}"])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", target])
+        else:
+            subprocess.Popen(["xdg-open", str(path.parent)])
+    except OSError as exc:  # 无桌面环境时别把请求打挂
+        print(f"[reveal] 打开文件夹失败: {exc}")
+
+
+def _safe_back(back: str, default: str) -> str:
+    """只允许回到站内路径，避免被拼成外链。"""
+    return back if back.startswith("/") and not back.startswith("//") else default
+
+
+@app.post("/draft/{uid}/reveal")
+def draft_reveal(uid: str, back: str = Form(default="/drafts")):
+    draft = db.one("SELECT * FROM drafts WHERE uid=?", (uid,))
+    if draft is None:
+        return RedirectResponse("/drafts?err=稿件不存在", status_code=303)
+    try:
+        path = write_draft_file(draft)
+    except OSError as exc:
+        return RedirectResponse(f"/drafts?err=导出失败：{exc}", status_code=303)
+    reveal_path(path)
+    return RedirectResponse(
+        f"{_safe_back(back, '/drafts')}?msg=已导出到 exports/{quote(path.name)}",
+        status_code=303,
+    )
+
+
+@app.post("/exports/open")
+def exports_open(back: str = Form(default="/drafts")):
+    db.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    reveal_path(db.EXPORT_DIR)
+    return RedirectResponse(
+        f"{_safe_back(back, '/drafts')}?msg=已打开导出文件夹", status_code=303
+    )
 
 
 # ---------------------------------------------------------------- 公众号文章

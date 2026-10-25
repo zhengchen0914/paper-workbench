@@ -16,6 +16,10 @@
     <span class="muted">v{{ draft.version }}</span>
     {% if draft.model %}<span class="muted">{{ draft.model }}</span>{% endif %}
     {% if draft.engine %}<span class="muted">引擎：{{ engine_labels.get(draft.engine, draft.engine) }}</span>{% endif %}
+    <form method="post" action="/draft/{{ draft.uid }}/reveal" class="inline">
+      <input type="hidden" name="back" value="/draft/{{ draft.uid }}">
+      <button class="btn tiny ghost" type="submit" title="导出为文件并在资源管理器中定位">在文件夹中打开</button>
+    </form>
   </p>
 </div>
 

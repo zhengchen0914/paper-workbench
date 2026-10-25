@@ -4,11 +4,18 @@
 
 <div class="page-head">
   <h1>稿件</h1>
-  <p class="sub">
+  <div class="sub head-row">
     <a class="tab {{ 'on' if kind != 'article' else '' }}" href="/drafts">论文解读</a>
     <a class="tab {{ 'on' if kind == 'article' else '' }}" href="/drafts?kind=article">公众号文章</a>
-  </p>
+    <form method="post" action="/exports/open" class="inline" style="margin-left:auto">
+      <input type="hidden" name="back" value="/drafts{% if kind == 'article' %}?kind=article{% endif %}">
+      <button class="btn tiny ghost" type="submit">打开导出文件夹</button>
+    </form>
+  </div>
 </div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if err %}<div class="banner warn">{{ err }}</div>{% endif %}
 
 {% if drafts %}
 <table class="table">
@@ -21,13 +28,17 @@
       <td class="num-cell">{{ d.content | length }}</td>
       <td class="muted">{{ engine_labels.get(d.engine, d.engine) }}</td>
       <td class="muted">{{ d.updated_at }}</td>
-      <td>
+      <td class="row-actions">
         {% if d.kind == 'article' %}
           <a class="btn tiny" href="/article/{{ d.uid }}">终审</a>
           <a class="btn tiny ghost" href="/draft/{{ d.uid }}">编辑</a>
         {% else %}
           <a class="btn tiny" href="/draft/{{ d.uid }}">打开</a>
         {% endif %}
+        <form method="post" action="/draft/{{ d.uid }}/reveal" class="inline">
+          <input type="hidden" name="back" value="/drafts{% if kind == 'article' %}?kind=article{% endif %}">
+          <button class="btn tiny ghost" type="submit" title="导出为文件并在资源管理器中定位">在文件夹中打开</button>
+        </form>
       </td>
     </tr>
   {% endfor %}

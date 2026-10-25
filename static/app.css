@@ -720,3 +720,10 @@ fieldset input { margin-bottom: 4px; }
   font-size: 10.5px; color: var(--muted); margin-left: 4px;
   font-style: normal; font-weight: 400;
 }
+/* 稿件行操作 */
+.row-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; white-space: nowrap; }
+/* 稿件页排版修正 */
+.head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row-actions { flex-wrap: nowrap; }
+.pill { white-space: nowrap; }
+.table td.row-actions { vertical-align: middle; }
