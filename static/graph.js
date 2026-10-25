@@ -2,6 +2,21 @@
    规模：~100 创新点 + ~70 机制 + ~30 论文 = 200 节点，
    直接在前端算布局，后端只给数据。 */
 
+function graphFail(message) {
+  const tip = document.getElementById("graph-tip");
+  const stats = document.getElementById("graph-stats");
+  if (stats) stats.textContent = `图谱加载失败：${message}`;
+  if (tip) {
+    tip.textContent = `图谱加载失败：${message}`;
+    tip.classList.add("on");
+  }
+  console.error("[graph]", message);
+}
+
+window.addEventListener("error", (event) => {
+  if (document.getElementById("graph-svg")) graphFail(event.message || "脚本异常");
+});
+
 (() => {
   const SVG_NS = "http://www.w3.org/2000/svg";
   const state = {
@@ -42,9 +57,18 @@
       min_refs: el.minRefs.value,
       include_papers: el.withPapers.checked ? "1" : "0",
     });
-    const response = await fetch(`/graph/data?${params}`);
-    const data = await response.json();
-    build(data);
+    try {
+      const response = await fetch(`/graph/data?${params}`);
+      if (!response.ok) throw new Error(`接口返回 ${response.status}`);
+      const data = await response.json();
+      if (!data.nodes || !data.nodes.length) {
+        graphFail("没有任何节点（知识库可能为空，或过滤条件太严）");
+        return;
+      }
+      build(data);
+    } catch (err) {
+      graphFail(err && err.message ? err.message : String(err));
+    }
   }
 
   function build(data) {
@@ -73,8 +97,17 @@
       `${data.stats.mechanisms} 个机制 · ${data.stats.insights} 条创新点 · ${data.stats.papers} 篇论文`;
 
     render();
+
+    // 先同步跑 260 轮把布局收敛好，再一次性适配视野：
+    // 这样打开页面就是稳定的图，而不是看它慢慢飘；也让截图/录屏可复现
     state.alpha = 1;
-    start();
+    for (let i = 0; i < 260; i += 1) {
+      simulate();
+      state.alpha *= 0.985;
+    }
+    state.alpha = 0.04;
+    fitView();
+    draw();
   }
 
   function render() {
@@ -103,9 +136,12 @@
       const text = document.createElementNS(SVG_NS, "text");
       text.setAttribute("dy", node.size + 11);
       text.textContent = trim(node.label, node.type === "insight" ? 12 : 16);
-      // 只常显「被多篇引用」的机制名与论文名，其余悬停才显示，避免 68 个标签糊成一团
+      // 只常显「被 3 条以上引用」的机制名；创新点与论文名悬停才显示，
+      // 否则 68 个机制 + 30 个长论文名会把画面糊死
       const minor =
-        node.type === "insight" || (node.type === "mechanism" && (node.refs || 0) < 2);
+        node.type === "insight" ||
+        node.type === "paper" ||
+        (node.type === "mechanism" && (node.refs || 0) < 3);
       if (minor) text.setAttribute("class", "graph-label-minor");
       group.appendChild(text);
 
@@ -187,7 +223,7 @@
           dist2 = 1;
         }
         const dist = Math.sqrt(dist2);
-        const force = (900 * alpha) / dist2;
+        const force = (3600 * alpha) / dist2;
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
         a.vx += fx;
@@ -202,7 +238,7 @@
       const dx = link.target.x - link.source.x;
       const dy = link.target.y - link.source.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const rest = link.kind === "tag" ? 70 : 55;
+      const rest = link.kind === "tag" ? 120 : 95;
       const k = (link.kind === "tag" ? 0.035 : 0.05) * alpha;
       const force = (dist - rest) * k;
       const fx = (dx / dist) * force;
@@ -222,16 +258,47 @@
         node.vy = 0;
         return;
       }
-      node.vx += (cx - node.x) * 0.0025 * alpha;
-      node.vy += (cy - node.y) * 0.0025 * alpha;
+      node.vx += (cx - node.x) * 0.0018 * alpha;
+      node.vy += (cy - node.y) * 0.0018 * alpha;
       node.vx *= 0.82;
       node.vy *= 0.82;
       node.x += node.vx;
       node.y += node.vy;
-      const pad = 20;
-      node.x = Math.max(pad, Math.min(state.width - pad, node.x));
-      node.y = Math.max(pad, Math.min(state.height - pad, node.y));
+      // 允许溢出画布，最后靠 fitView 一次性缩放到可见范围，
+      // 否则所有边缘节点会被钳在边框上排成一圈
+      const overflow = 600;
+      node.x = Math.max(-overflow, Math.min(state.width + overflow, node.x));
+      node.y = Math.max(-overflow, Math.min(state.height + overflow, node.y));
     });
+  }
+
+  function fitView() {
+    if (!state.nodes.length) return;
+    // 用 3%–97% 分位数代替最大最小值：个别离群节点会把包围盒撑大，
+    // 导致整张图被缩得很小、挤在中间
+    const quartile = (values, ratio) => {
+      const sorted = values.slice().sort((a, b) => a - b);
+      const index = Math.max(0, Math.min(sorted.length - 1, Math.round((sorted.length - 1) * ratio)));
+      return sorted[index];
+    };
+    const xs = state.nodes.map((node) => node.x);
+    const ys = state.nodes.map((node) => node.y);
+    const minX = quartile(xs, 0.03);
+    const maxX = quartile(xs, 0.97);
+    const minY = quartile(ys, 0.03);
+    const maxY = quartile(ys, 0.97);
+    const boxW = Math.max(1, maxX - minX);
+    const boxH = Math.max(1, maxY - minY);
+    const pad = 60;
+    const scale = Math.min(
+      (state.width - pad * 2) / boxW,
+      (state.height - pad * 2) / boxH,
+      1.25,
+    );
+    state.scale = Math.max(0.4, scale);
+    state.tx = state.width / 2 - ((minX + maxX) / 2) * state.scale;
+    state.ty = state.height / 2 - ((minY + maxY) / 2) * state.scale;
+    applyTransform();
   }
 
   function start() {
@@ -243,6 +310,7 @@
       state.alpha *= 0.985;
       if (state.alpha < 0.03) {
         state.running = false;
+        fitView();
         return;
       }
       requestAnimationFrame(step);

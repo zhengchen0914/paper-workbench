@@ -15,7 +15,7 @@
   <label>最小引用
     <select id="graph-min-refs">
       <option value="1">1（全部）</option>
-      <option value="2">2</option>
+      <option value="2" selected>2</option>
       <option value="3">3</option>
       <option value="5">5</option>
     </select>
@@ -48,5 +48,5 @@
 
 <p class="hint">滚轮缩放 · 拖动空白处平移 · 拖节点可固定 · 点节点跳转详情</p>
 
-<script src="/static/graph.js" defer></script>
+<script src="/static/graph.js?v={{ version }}" defer></script>
 {% endblock %}
