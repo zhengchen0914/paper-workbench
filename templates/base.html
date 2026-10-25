@@ -28,5 +28,28 @@
 {% block body %}{% endblock %}
 </main>
 <footer class="foot">本地运行 · 数据只保存在这台机器 · v{{ version }}</footer>
+<script>
+// 导出成功时横幅里带着绝对路径；给个一键复制，省得手选。
+// 有些环境（后台/无桌面会话）explorer 弹不出来，路径就是最后的兜底。
+document.querySelectorAll('.banner').forEach((box) => {
+  const match = (box.textContent || '').match(/[A-Za-z]:\\[^\n]*?\.(?:md|zip|html|png|jpg)/);
+  if (!match) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn tiny ghost';
+  button.textContent = '复制路径';
+  button.style.marginLeft = '10px';
+  button.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(match[0]);
+      button.textContent = '已复制';
+    } catch (err) {
+      button.textContent = '复制失败';
+    }
+    setTimeout(() => { button.textContent = '复制路径'; }, 1600);
+  });
+  box.appendChild(button);
+});
+</script>
 </body>
 </html>

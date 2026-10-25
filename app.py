@@ -421,18 +421,30 @@ def write_draft_file(draft: dict[str, Any]) -> Path:
     return path
 
 
-def reveal_path(path: Path) -> None:
-    """在系统文件管理器里定位到该文件。"""
-    target = str(path)
+def reveal_path(path: Path) -> bool:
+    """在系统文件管理器里定位到该文件。返回是否成功发起调用。
+
+    注意：`explorer /select,<路径>` 必须让 `/select,` 和引号紧挨着，
+    所以用**字符串**命令行，不能用列表形式——列表形式会拼成
+    `"/select,C:\a b\f.zip"`，把 /select 一起裹进引号，explorer 直接无视。
+    """
+    target = str(path.resolve())
     try:
         if sys.platform.startswith("win"):
-            subprocess.Popen(["explorer", f"/select,{target}"])
+            subprocess.Popen(f'explorer /select,"{target}"')
         elif sys.platform == "darwin":
             subprocess.Popen(["open", "-R", target])
         else:
             subprocess.Popen(["xdg-open", str(path.parent)])
+        return True
     except OSError as exc:  # 无桌面环境时别把请求打挂
         print(f"[reveal] 打开文件夹失败: {exc}")
+        return False
+
+
+def _export_dir_hint(path: Path) -> str:
+    """给用户的落点说明：即使窗口没弹出来，也能自己找到文件。"""
+    return f"已导出：{path}"
 
 
 def _safe_back(back: str, default: str) -> str:
@@ -462,7 +474,7 @@ def draft_reveal(uid: str, back: str = Form(default="/drafts")):
         return RedirectResponse(f"/drafts?err=导出失败：{exc}", status_code=303)
     reveal_path(path)
     return RedirectResponse(
-        _back_with(back, "msg", f"已导出到 exports/{path.name}"),
+        _back_with(back, "msg", _export_dir_hint(path)),
         status_code=303,
     )
 
@@ -471,7 +483,7 @@ def draft_reveal(uid: str, back: str = Form(default="/drafts")):
 def exports_open(back: str = Form(default="/drafts")):
     db.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     reveal_path(db.EXPORT_DIR)
-    return RedirectResponse(_back_with(back, "msg", "已打开导出文件夹"), status_code=303)
+    return RedirectResponse(_back_with(back, "msg", f"已打开导出文件夹：{db.EXPORT_DIR}"), status_code=303)
 
 
 # ---------------------------------------------------------------- 公众号文章
@@ -818,7 +830,7 @@ def article_export_to_folder(uid: str):
         )
     reveal_path(zip_path)
     return RedirectResponse(
-        _back_with(f"/article/{uid}", "msg", f"已导出到 exports/{zip_path.name}"),
+        _back_with(f"/article/{uid}", "msg", _export_dir_hint(zip_path)),
         status_code=303,
     )
 
