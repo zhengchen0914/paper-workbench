@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}知识图谱 · 论文工坊{% endblock %}
+{% block body %}
+
+<div class="page-head">
+  <div class="crumb"><a href="/knowledge">知识库</a> / 知识图谱</div>
+  <h1>知识图谱</h1>
+  <p class="sub">
+    {{ counts.insights }} 条创新点 · {{ counts.mechanisms }} 个机制 · {{ counts.papers }} 篇论文
+    <span class="muted">— 看哪些机制被反复使用，哪些是孤岛</span>
+  </p>
+</div>
+
+<section class="graph-bar">
+  <label>最小引用
+    <select id="graph-min-refs">
+      <option value="1">1（全部）</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="5">5</option>
+    </select>
+  </label>
+  <label class="graph-check">
+    <input type="checkbox" id="graph-with-papers" checked> 显示论文节点
+  </label>
+  <label class="grow">搜索高亮
+    <input type="text" id="graph-search" placeholder="输入机制名或创新点关键词">
+  </label>
+  <button class="btn" type="button" id="graph-relayout">重新布局</button>
+  <span class="graph-legend">
+    <span class="dot mechanism"></span>机制
+    <span class="dot insight"></span>创新点
+    <span class="dot paper"></span>论文
+  </span>
+</section>
+
+<p class="hint" id="graph-stats">加载中…</p>
+
+<section class="graph-canvas">
+  <svg id="graph-svg">
+    <g id="graph-viewport">
+      <g id="graph-links"></g>
+      <g id="graph-nodes"></g>
+    </g>
+  </svg>
+  <div id="graph-tip" class="graph-tip"></div>
+</section>
+
+<p class="hint">滚轮缩放 · 拖动空白处平移 · 拖节点可固定 · 点节点跳转详情</p>
+
+<script src="/static/graph.js" defer></script>
+{% endblock %}

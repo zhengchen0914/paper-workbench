@@ -1455,6 +1455,115 @@ def knowledge_confirm_all():
     )
 
 
+# ---------------------------------------------------------------- 知识图谱
+
+
+@app.get("/graph", response_class=HTMLResponse)
+def graph_page(request: Request) -> HTMLResponse:
+    counts = {
+        "insights": db.one("SELECT COUNT(*) AS n FROM insights")["n"],
+        "mechanisms": db.one("SELECT COUNT(*) AS n FROM mechanisms")["n"],
+        "papers": db.one("SELECT COUNT(DISTINCT draft_uid) AS n FROM insights")["n"],
+    }
+    return render(request, "graph.html", active="knowledge", counts=counts)
+
+
+@app.get("/graph/data")
+def graph_data(min_refs: int = 1, include_papers: int = 1) -> dict[str, Any]:
+    """返回三层结构的图数据：论文 — 创新点 — 机制。
+
+    节点规模限制在几百个（100 条洞察 + 71 个机制 + 30 篇论文），
+    力导向在前端跑完全够；不需要后端算布局。
+    """
+    mechanisms = db.query(
+        "SELECT m.uid, m.name, m.verified, "
+        "(SELECT COUNT(*) FROM insight_mechanisms im WHERE im.mechanism_uid = m.uid) AS refs "
+        "FROM mechanisms m ORDER BY refs DESC"
+    )
+    keep = {m["uid"] for m in mechanisms if int(m["refs"]) >= max(1, min_refs)}
+
+    insights = db.query(
+        "SELECT i.uid, i.title, i.novelty_type, i.draft_uid, "
+        "d.title AS paper_title FROM insights i "
+        "LEFT JOIN drafts d ON d.uid = i.draft_uid WHERE i.status != 'rejected'"
+    )
+    links = db.query(
+        "SELECT im.insight_uid, im.mechanism_uid FROM insight_mechanisms im "
+        "JOIN mechanisms m ON m.uid = im.mechanism_uid"
+    )
+
+    nodes: list[dict[str, Any]] = []
+    node_links: list[dict[str, str]] = []
+
+    used_insights: set[str] = set()
+    for link in links:
+        if link["mechanism_uid"] not in keep:
+            continue
+        node_links.append(
+            {"source": link["insight_uid"], "target": link["mechanism_uid"], "kind": "tag"}
+        )
+        used_insights.add(link["insight_uid"])
+
+    for mech in mechanisms:
+        if mech["uid"] not in keep:
+            continue
+        nodes.append(
+            {
+                "id": mech["uid"],
+                "label": mech["name"],
+                "type": "mechanism",
+                "size": 5 + min(14, int(mech["refs"]) * 1.1),
+                "refs": int(mech["refs"]),
+                "url": "/mechanisms",
+            }
+        )
+
+    papers: dict[str, dict[str, Any]] = {}
+    for insight in insights:
+        if insight["uid"] not in used_insights:
+            continue
+        nodes.append(
+            {
+                "id": insight["uid"],
+                "label": insight["title"],
+                "type": "insight",
+                "size": 4,
+                "kind": insight["novelty_type"] or "",
+                "url": f"/knowledge/{insight['uid']}",
+            }
+        )
+        draft_uid = insight["draft_uid"] or ""
+        if include_papers and draft_uid:
+            paper = papers.setdefault(
+                draft_uid,
+                {
+                    "id": draft_uid,
+                    "label": (insight["paper_title"] or "未命名论文"),
+                    "type": "paper",
+                    "size": 9,
+                    "count": 0,
+                    "url": f"/draft/{draft_uid}",
+                },
+            )
+            paper["count"] += 1
+            node_links.append({"source": draft_uid, "target": insight["uid"], "kind": "belongs"})
+
+    if include_papers:
+        for paper in papers.values():
+            paper["size"] = 8 + min(10, paper["count"] * 1.5)
+            nodes.append(paper)
+
+    return {
+        "nodes": nodes,
+        "links": node_links,
+        "stats": {
+            "mechanisms": len(keep),
+            "insights": len(used_insights),
+            "papers": len(papers),
+        },
+    }
+
+
 # ---------------------------------------------------------------- 机制卡维护
 
 

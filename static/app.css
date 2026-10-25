@@ -634,6 +634,60 @@ fieldset input { margin-bottom: 4px; }
 .mech-add { display: flex; gap: 6px; }
 .mech-add input { flex: 1; }
 
+/* ---------- 知识图谱 ---------- */
+.graph-bar {
+  display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px;
+}
+.graph-bar label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.graph-bar select, .graph-bar input[type="text"] { width: auto; min-width: 130px; }
+.graph-bar .grow { flex: 1; min-width: 200px; }
+.graph-bar .grow input { width: 100%; }
+.graph-check { flex-direction: row !important; align-items: center; gap: 6px !important; padding-bottom: 7px; }
+.graph-legend { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); padding-bottom: 7px; }
+.graph-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.graph-legend .dot.mechanism { background: #9b3d2c; }
+.graph-legend .dot.insight { background: #6b8cae; }
+.graph-legend .dot.paper { background: #3a352c; }
+
+.graph-canvas {
+  position: relative; height: calc(100vh - 330px); min-height: 460px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: radial-gradient(circle at 50% 40%, #fffdf8 0%, #f7f4ec 100%);
+  overflow: hidden;
+}
+#graph-svg { width: 100%; height: 100%; display: block; cursor: grab; }
+#graph-svg:active { cursor: grabbing; }
+
+.graph-node { cursor: pointer; }
+.graph-node circle { stroke: #fffdf8; stroke-width: 1.5; transition: opacity 0.15s; }
+.graph-node.mechanism circle { fill: #9b3d2c; }
+.graph-node.insight circle { fill: #6b8cae; }
+.graph-node.paper circle { fill: #3a352c; }
+.graph-node text {
+  font-family: var(--sans); font-size: 10px; fill: #4a4338;
+  text-anchor: middle; pointer-events: none; user-select: none;
+}
+.graph-node.mechanism text { font-size: 10.5px; font-weight: 600; fill: #7a2f22; }
+.graph-node.paper text { font-size: 10.5px; font-weight: 600; fill: #2a241c; }
+.graph-node .graph-label-minor { font-size: 8.5px; fill: #8a8377; opacity: 0; transition: opacity 0.15s; }
+.graph-node:hover .graph-label-minor { opacity: 1; }
+.graph-node:hover circle { stroke: #1a1a1a; stroke-width: 2; }
+.graph-node.dragging circle { stroke: #1a1a1a; stroke-width: 2; }
+
+.graph-link { stroke: #9b3d2c; stroke-width: 1; }
+.graph-link.belongs { stroke: #3a352c; stroke-width: 0.8; }
+
+.graph-tip {
+  position: absolute; left: 14px; top: 14px; max-width: 320px;
+  background: rgba(33, 30, 25, 0.92); color: #f6f2e9;
+  font-size: 12px; line-height: 1.6; padding: 7px 11px; border-radius: 7px;
+  opacity: 0; transition: opacity 0.15s; pointer-events: none;
+}
+.graph-tip.on { opacity: 1; }
+
+
 
 
 
