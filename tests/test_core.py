@@ -353,6 +353,44 @@ def test_radar_scores_affiliation():
     assert any("强机构" in reason for reason in top_reasons)
 
 
+def test_venue_pattern_matches_year_suffix():
+    """作者常写「WACV2026」，结尾的 \\b 会漏掉这种写法。"""
+    assert radar.VENUE_PATTERN.search("Accepted in WACV2026").group(1).upper() == "WACV"
+    assert radar.VENUE_PATTERN.search("Accepted at the IEEE ICDM 2026 Applied Research Track")
+    assert radar.VENUE_PATTERN.search("Accepted to WACV 2027")
+    assert radar.VENUE_PATTERN.search("Accepted by IEEE TIP")
+    # 不能误伤：CVPRX 不是会议
+    assert radar.VENUE_PATTERN.search("CVPRX is not a venue") is None
+    assert radar.VENUE_PATTERN.search("12 pages, code at github") is None
+
+
+def test_metadata_score_accepts_institution_string():
+    """库里的 institutions 是顿号分隔的字符串，评分函数要自己拆开。
+
+    踩过的坑：直接传字符串，is_top 会逐字符遍历，强机构永远匹配不上。
+    """
+    candidate = {
+        "title": "t",
+        "comment": "",
+        "abstract": "",
+        "published": "2026-09-30",
+        "institutions": "Fudan University、Alibaba Group (China)",
+    }
+    today = __import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc)
+
+    _, _, string_parts = radar.metadata_score(candidate, today=today)
+    assert string_parts["inst"] == 10  # 字符串也要能识别出强机构
+
+    _, _, list_parts = radar.metadata_score(
+        {**candidate, "institutions": ["Fudan University", "Alibaba Group (China)"]},
+        today=today,
+    )
+    assert list_parts["inst"] == 10
+
+    _, _, empty_parts = radar.metadata_score({**candidate, "institutions": ""}, today=today)
+    assert empty_parts["inst"] == 0
+
+
 def test_merge_uses_weighted_score_not_raw_points():
     """摘要分 70% + 元数据 30%，6 分才及格。"""
     assert radar.combine_scores(10, 10) == 10.0

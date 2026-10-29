@@ -736,6 +736,11 @@ def _run_radar(job_uid: str, limit: int) -> None:
             if parsed is None:
                 failed += 1
             else:
+                # institutions 在库里是顿号分隔的字符串，必须先拆成列表：
+                # 直接传字符串会让 is_top 逐字符遍历，机构分永远是 0
+                row["institutions"] = [
+                    x for x in (row.get("institutions") or "").split("、") if x
+                ]
                 meta, reasons, _ = radar.metadata_score(row)
                 normalized = radar_scoring.normalize(parsed["score"])
                 final = radar.combine_scores(normalized, meta)

@@ -27,10 +27,13 @@ NS = {
     "opensearch": "http://a9.com/-/spec/opensearch/1.1/",
 }
 
-# 顶会/顶刊线索：出现在 arxiv:comment 里通常意味着已中稿
+# 顶会/顶刊线索：出现在 arxiv:comment 里通常意味着已中稿。
+# 结尾不能用 \b —— 作者常写「WACV2026」，W 与 2 之间没有词边界，\b 会漏掉。
+# 改成「后面不能紧跟字母」，这样 WACV2026 命中、CVPRX 不命中。
 VENUE_PATTERN = re.compile(
-    r"\b(CVPR|ICCV|ECCV|AAAI|NeurIPS|NIPS|ICLR|ICML|ACM\s*MM|TPAMI|TIP|TMM|"
-    r"ICRA|WACV|BMVC|IJCAI|SIGGRAPH)\b",
+    r"\b(CVPRW?|ICCVW?|ECCVW?|AAAI|NeurIPS|NIPS|ICLR|ICML|ACM\s*MM|TPAMI|TIP|TMM|TNNLS|"
+    r"TMI|TCSVT|TII|TGRS|IJCV|ICRA|IROS|WACV|BMVC|IJCAI|SIGGRAPH|ACCV|ICIP|ICME|ICASSP|"
+    r"ICDM|KDD|WWW|MICCAI|3DV)(?![A-Za-z])",
     re.IGNORECASE,
 )
 CODE_PATTERN = re.compile(r"github\.com|gitlab\.com|huggingface\.co", re.IGNORECASE)
@@ -214,8 +217,10 @@ def metadata_score(
     else:
         parts["venue"] = 0.0
 
-    # 作者单位
+    # 作者单位（库里是顿号分隔的字符串，这里统一成列表再判）
     institutions = candidate.get("institutions") or []
+    if isinstance(institutions, str):
+        institutions = [x for x in institutions.split("、") if x]
     if affiliations.is_top(institutions):
         parts["inst"] = 10.0
         reasons.append(f"强机构：{affiliations.describe(institutions)}")
