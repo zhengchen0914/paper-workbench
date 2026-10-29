@@ -175,7 +175,7 @@ def _to_candidate(entry: ET.Element, keyword: str) -> dict[str, Any] | None:
     return candidate
 
 
-# 元数据侧的权重（合计 1.0），最终与摘要分按 40/60 合成
+# 元数据侧的权重（合计 1.0），最终与摘要分按 30/70 合成
 META_WEIGHTS = {
     "venue": 0.45,   # 顶会/顶刊
     "inst": 0.25,    # 作者单位
@@ -183,8 +183,8 @@ META_WEIGHTS = {
     "fresh": 0.15,   # 时效
 }
 
-CONTENT_WEIGHT = 0.60
-META_WEIGHT = 0.40
+CONTENT_WEIGHT = 0.70
+META_WEIGHT = 0.30
 
 
 def metadata_score(
@@ -252,7 +252,7 @@ def metadata_score(
 
 
 def combine_scores(content: float, meta: float) -> float:
-    """摘要分占 60%、元数据占 40%，合成 0–10 的加权总分。"""
+    """摘要分占 70%、元数据占 30%，合成 0–10 的加权总分。"""
     return round(content * CONTENT_WEIGHT + meta * META_WEIGHT, 1)
 
 

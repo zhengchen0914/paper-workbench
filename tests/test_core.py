@@ -354,13 +354,15 @@ def test_radar_scores_affiliation():
 
 
 def test_merge_uses_weighted_score_not_raw_points():
-    """摘要分 60% + 元数据 40%，6 分才及格。"""
+    """摘要分 70% + 元数据 30%，6 分才及格。"""
     assert radar.combine_scores(10, 10) == 10.0
     assert radar.combine_scores(6, 6) == 6.0
-    # 摘要很一般（5）但元数据满分（10）→ 7.0，说明元数据不能单独把烂摘要抬过线
-    assert radar.combine_scores(5, 10) == 7.0
-    # 摘要很好（9）但元数据 0 → 5.4，不到及格线
-    assert radar.combine_scores(9, 0) == 5.4
+    # 摘要一般（5）但元数据满分（10）→ 6.5，元数据能救但救不了太多
+    assert radar.combine_scores(5, 10) == 6.5
+    # 摘要很好（9）但元数据 0 → 6.3，刚过线：摘要主导，质量好的论文不该被元数据埋掉
+    assert radar.combine_scores(9, 0) == 6.3
+    # 摘要差（3）时，元数据满分也只有 5.1，过不了线
+    assert radar.combine_scores(3, 10) == 5.1
 
 
 def test_content_score_normalization():

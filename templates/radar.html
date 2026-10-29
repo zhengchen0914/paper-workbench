@@ -37,7 +37,7 @@
     <div class="cand-head">
       {% if c.content_score is not none and c.content_score >= 0 %}
       <span class="score-badge {{ 'high' if c.score >= 6 else ('mid' if c.score >= 4 else 'low') }}"
-            title="加权分 = 摘要 {{ '%.1f' | format(c.content_score) }} × 60% + 元数据 {{ '%.1f' | format(c.meta_score) }} × 40%">{{ '%.1f' | format(c.score) }}</span>
+            title="加权分 = 摘要 {{ '%.1f' | format(c.content_norm) }} × 70% + 元数据 {{ '%.1f' | format(c.meta_score) }} × 30%">{{ '%.1f' | format(c.score) }}</span>
       {% else %}
       <span class="score-badge pending" title="摘要还没评分，当前只显示元数据分">待评</span>
       {% endif %}
@@ -54,8 +54,8 @@
     <p class="score-split">
       <span>摘要 {{ '%.1f' | format(c.content_score) }}
         {% if c.content_norm is not none and c.content_norm >= 0 %}→ {{ '%.1f' | format(c.content_norm) }}{% endif %}
-        <em>×60%</em></span>
-      <span>元数据 {{ '%.1f' | format(c.meta_score) }} <em>×40%</em></span>
+        <em>×70%</em></span>
+      <span>元数据 {{ '%.1f' | format(c.meta_score) }} <em>×30%</em></span>
       {% if c.score_detail %}<span class="muted">{{ c.score_detail }}</span>{% endif %}
     </p>
     {% endif %}
