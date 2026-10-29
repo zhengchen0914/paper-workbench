@@ -335,6 +335,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("candidates", "institutions", "TEXT NOT NULL DEFAULT ''"),
     # 加权分拆解：摘要分（模型，60%）、元数据分（40%）、维度明细；-1 表示还没评
     ("candidates", "content_score", "REAL NOT NULL DEFAULT -1"),
+    # 摘要分标准化后的值（4–9 拉伸到 0–10），最终加权用这个
+    ("candidates", "content_norm", "REAL NOT NULL DEFAULT -1"),
     ("candidates", "meta_score", "REAL NOT NULL DEFAULT 0"),
     ("candidates", "score_detail", "TEXT NOT NULL DEFAULT ''"),
 )

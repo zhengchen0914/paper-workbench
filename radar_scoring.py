@@ -85,3 +85,19 @@ def parse(raw: str) -> dict[str, Any] | None:
 def breakdown(dims: dict[str, int]) -> str:
     """把维度分数压成一行，便于展示。"""
     return " · ".join(f"{label.split('：')[0]} {dims.get(key, 0)}" for key, _, label in DIMENSIONS)
+
+
+# 模型给的原始分实际落在 4.8–8.0，不敢给低分。
+# 直接用会让 60% 的权重失去区分度，所以拉伸到全量程：
+# ≤4 归 0，≥9 给满，中间线性映射。
+RAW_LOW = 4.0
+RAW_HIGH = 9.0
+
+
+def normalize(raw: float) -> float:
+    """原始摘要分 → 0–10 的标准化分。"""
+    if raw <= RAW_LOW:
+        return 0.0
+    if raw >= RAW_HIGH:
+        return 10.0
+    return round((raw - RAW_LOW) / (RAW_HIGH - RAW_LOW) * 10, 2)

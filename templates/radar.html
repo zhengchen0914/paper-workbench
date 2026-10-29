@@ -52,7 +52,9 @@
     </p>
     {% if c.content_score is not none and c.content_score >= 0 %}
     <p class="score-split">
-      <span>摘要 {{ '%.1f' | format(c.content_score) }} <em>×60%</em></span>
+      <span>摘要 {{ '%.1f' | format(c.content_score) }}
+        {% if c.content_norm is not none and c.content_norm >= 0 %}→ {{ '%.1f' | format(c.content_norm) }}{% endif %}
+        <em>×60%</em></span>
       <span>元数据 {{ '%.1f' | format(c.meta_score) }} <em>×40%</em></span>
       {% if c.score_detail %}<span class="muted">{{ c.score_detail }}</span>{% endif %}
     </p>

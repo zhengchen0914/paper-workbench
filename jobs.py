@@ -737,12 +737,14 @@ def _run_radar(job_uid: str, limit: int) -> None:
                 failed += 1
             else:
                 meta, reasons, _ = radar.metadata_score(row)
-                final = radar.combine_scores(parsed["score"], meta)
+                normalized = radar_scoring.normalize(parsed["score"])
+                final = radar.combine_scores(normalized, meta)
                 db.execute(
-                    "UPDATE candidates SET content_score=?, meta_score=?, score=?, "
-                    "score_detail=?, reasons=?, updated_at=? WHERE uid=?",
+                    "UPDATE candidates SET content_score=?, content_norm=?, meta_score=?, "
+                    "score=?, score_detail=?, reasons=?, updated_at=? WHERE uid=?",
                     (
                         parsed["score"],
+                        normalized,
                         meta,
                         final,
                         radar_scoring.breakdown(parsed["dims"]),

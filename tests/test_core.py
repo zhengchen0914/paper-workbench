@@ -363,6 +363,28 @@ def test_merge_uses_weighted_score_not_raw_points():
     assert radar.combine_scores(9, 0) == 5.4
 
 
+def test_content_score_normalization():
+    """模型给的原始分挤在 4.8–8.0，映射到全量程才能拉开差距。"""
+    import radar_scoring
+
+    assert radar_scoring.normalize(3.5) == 0.0     # 低于 4 归零
+    assert radar_scoring.normalize(4.0) == 0.0
+    assert radar_scoring.normalize(6.5) == 5.0     # 中位拉到中点
+    assert radar_scoring.normalize(4.8) == 1.6
+    assert radar_scoring.normalize(8.0) == 8.0
+    assert radar_scoring.normalize(9.0) == 10.0
+    assert radar_scoring.normalize(9.6) == 10.0    # 超过 9 给满
+
+
+def test_normalization_spreads_compressed_scores():
+    """原本 6.4 与 7.2 只差 0.8 分，标准化后应拉大到 1.6 分。"""
+    import radar_scoring
+
+    gap_before = 7.2 - 6.4
+    gap_after = radar_scoring.normalize(7.2) - radar_scoring.normalize(6.4)
+    assert gap_after > gap_before * 1.5
+
+
 def test_affiliation_tier_matching():
     import affiliations
 
