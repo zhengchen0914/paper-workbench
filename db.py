@@ -225,7 +225,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
         "zero-shot anomaly segmentation"
     ),
     "radar_per_keyword": "15",
-    "radar_max_age_days": "180",
+    "radar_max_age_days": "1095",
     "radar_last_fetch": "",
     "github_token": "",
 }

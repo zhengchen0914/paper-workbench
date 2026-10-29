@@ -33,6 +33,10 @@ VENUE_PATTERN = re.compile(
 )
 CODE_PATTERN = re.compile(r"github\.com|gitlab\.com|huggingface\.co", re.IGNORECASE)
 
+# 时效按年计：一年内算新（含半年），一到三年算过渡，三年以上算过时
+FRESH_DAYS = 365
+STALE_DAYS = 365 * 3
+
 # 期刊常写全称（journal_ref 里），而质量档位要的是缩写，这里做一层映射
 JOURNAL_ALIASES: dict[str, str] = {
     "TPAMI": "pattern analysis and machine intelligence",
@@ -51,7 +55,7 @@ def fetch_candidates(
     keywords: list[str],
     *,
     per_keyword: int = 15,
-    max_age_days: int = 180,
+    max_age_days: int = 1095,
     timeout: float = 30.0,
     pause_seconds: float = 1.0,
 ) -> tuple[list[dict[str, Any]], list[str]]:
@@ -208,12 +212,15 @@ def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None)
 
     age = _age_days(candidate.get("published", ""), today=today)
     if age is not None:
-        if age <= 7:
+        # 以年为单位：一年内（含半年）算新，一到三年算过渡，三年以上算过时
+        if age <= FRESH_DAYS:
             score += 2
-            reasons.append(f"{age} 天前发布")
-        elif age <= 30:
+            reasons.append(f"{age} 天前发布（一年内）")
+        elif age <= STALE_DAYS:
             score += 1
-            reasons.append(f"{age} 天前发布")
+            reasons.append(f"{age // 365} 年前发布")
+        else:
+            reasons.append("超过 3 年，按过时处理")
 
     return min(score, 10), reasons
 

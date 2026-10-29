@@ -885,9 +885,9 @@ def radar_fetch():
 
     try:
         per_keyword = int(float(settings.get("radar_per_keyword") or 15))
-        max_age = int(float(settings.get("radar_max_age_days") or 180))
+        max_age = int(float(settings.get("radar_max_age_days") or 1095))
     except (TypeError, ValueError):
-        per_keyword, max_age = 15, 180
+        per_keyword, max_age = 15, 1095
 
     try:
         found, errors = radar.fetch_candidates(
@@ -1969,7 +1969,7 @@ def save_settings_form(
     max_paper_chars: str = Form(default="120000"),
     radar_keywords: str = Form(default=""),
     radar_per_keyword: str = Form(default="15"),
-    radar_max_age_days: str = Form(default="180"),
+    radar_max_age_days: str = Form(default="1095"),
     github_token: str = Form(default=""),
 ) -> RedirectResponse:
     current = db.get_settings()
@@ -1981,7 +1981,7 @@ def save_settings_form(
         "max_paper_chars": max_paper_chars.strip() or "120000",
         "radar_keywords": radar_keywords.strip() or current.get("radar_keywords", ""),
         "radar_per_keyword": radar_per_keyword.strip() or "15",
-        "radar_max_age_days": radar_max_age_days.strip() or "180",
+        "radar_max_age_days": radar_max_age_days.strip() or "1095",
     }
     # 留空表示不修改已保存的密钥
     if llm_api_key.strip():

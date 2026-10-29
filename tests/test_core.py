@@ -254,11 +254,29 @@ def test_radar_score_recency_buckets():
         }
         return radar.score_candidate(candidate, today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc))[0]
 
-    # 时效权重下调（质量优先）：7 天内 +2，30 天内 +1，更早不加分
-    assert score_for("2026-09-30") == 2
-    assert score_for("2026-09-20") == 1
-    assert score_for("2026-08-01") == 0
-    assert score_for("2026-01-01") == 0
+    # 时效以年为单位：一年内（含半年）算新 +2，一到三年 +1，三年以上 0
+    assert score_for("2026-09-30") == 2   # 1 天
+    assert score_for("2026-05-01") == 2   # 5 个月，仍算新
+    assert score_for("2025-12-01") == 2   # 10 个月，仍算新
+    assert score_for("2025-06-01") == 1   # 1 年 4 个月，过渡
+    assert score_for("2023-10-02") == 1   # 快 3 年，过渡
+    assert score_for("2021-01-01") == 0   # 超过 3 年，过时
+
+
+def test_radar_marks_stale_paper_as_outdated():
+    candidate = {
+        "title": "t",
+        "comment": "",
+        "abstract": "",
+        "keyword": "x",
+        "published": "2020-01-01",
+    }
+    score, reasons = radar.score_candidate(
+        candidate,
+        today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
+    )
+    assert score == 0
+    assert any("过时" in reason for reason in reasons)
 
 
 def test_radar_quality_outweighs_recency():

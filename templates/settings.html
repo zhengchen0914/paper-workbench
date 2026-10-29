@@ -54,11 +54,14 @@
       <label>每个关键词取几条
         <input type="text" name="radar_per_keyword" value="{{ settings.radar_per_keyword }}">
       </label>
-      <label>只看最近多少天
+      <label>抓取时间窗口（天）
         <input type="text" name="radar_max_age_days" value="{{ settings.radar_max_age_days }}">
       </label>
     </div>
-    <p class="hint">抓取走 arXiv 官方 API，关键词越多耗时越长（请求之间留 1 秒间隔）。</p>
+    <p class="hint">
+      抓取走 arXiv 官方 API，关键词越多耗时越长（请求之间留 1 秒间隔）。
+      窗口默认 1095 天（3 年）——打分时一年内算新、一到三年算过渡、三年以上标过时。
+    </p>
   </fieldset>
 
   <fieldset>
