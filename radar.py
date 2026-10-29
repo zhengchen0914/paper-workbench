@@ -33,6 +33,15 @@ VENUE_PATTERN = re.compile(
 )
 CODE_PATTERN = re.compile(r"github\.com|gitlab\.com|huggingface\.co", re.IGNORECASE)
 
+# 期刊常写全称（journal_ref 里），而质量档位要的是缩写，这里做一层映射
+JOURNAL_ALIASES: dict[str, str] = {
+    "TPAMI": "pattern analysis and machine intelligence",
+    "TIP": "transactions on image processing",
+    "TMM": "transactions on multimedia",
+    "IJCV": "international journal of computer vision",
+    "TNNLS": "transactions on neural networks and learning systems",
+}
+
 
 class RadarError(RuntimeError):
     """抓取失败，携带对用户可读的说明。"""
@@ -138,6 +147,7 @@ def _to_candidate(entry: ET.Element, keyword: str) -> dict[str, Any] | None:
         if category.get("term")
     ]
     comment = _clean(_text(entry, "arxiv:comment"))
+    journal_ref = _clean(_text(entry, "arxiv:journal_ref"))
 
     candidate = {
         "source": "arxiv",
@@ -149,6 +159,7 @@ def _to_candidate(entry: ET.Element, keyword: str) -> dict[str, Any] | None:
         "url": abs_url,
         "pdf_url": pdf_url,
         "comment": comment,
+        "journal_ref": journal_ref,
         "categories": ", ".join(categories[:3]),
         "keyword": keyword,
     }
@@ -159,16 +170,32 @@ def _to_candidate(entry: ET.Element, keyword: str) -> dict[str, Any] | None:
 
 
 def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None) -> tuple[int, list[str]]:
-    """可解释的加权打分（满分 10）。每条加分都附一句理由。"""
+    """可解释的加权打分（满分 10）。每条加分都附一句理由。
+
+    权重取向：**质量优先、时效次之**。
+    - 已中顶会/顶刊 +5（最强的质量信号，且可复核）
+    - 开源代码 +2（可复现性，弱质量信号）
+    - 标题命中关键词 +1（只代表相关，不代表质量）
+    - 时效：7 天内 +2 / 30 天内 +1 / 更早 0（追新，但不该压过质量）
+    """
     score = 0
     reasons: list[str] = []
 
     blob = f"{candidate.get('title', '')} {candidate.get('comment', '')} {candidate.get('abstract', '')}"
 
-    venue_match = VENUE_PATTERN.search(candidate.get("comment", "") or "")
-    if venue_match:
+    venue_text = f"{candidate.get('comment', '') or ''} {candidate.get('journal_ref', '') or ''}"
+    venue_match = VENUE_PATTERN.search(venue_text)
+    venue_lower = venue_text.lower()
+    venue_name = venue_match.group(1).upper() if venue_match else next(
+        (short for short, full in JOURNAL_ALIASES.items() if full in venue_lower), ""
+    )
+    if venue_name:
+        score += 5
+        reasons.append(f"疑似已中 {venue_name}")
+    elif (candidate.get("journal_ref") or "").strip():
+        # 有 journal_ref 说明已正式发表，但看不出是哪家
         score += 3
-        reasons.append(f"疑似已中 {venue_match.group(1).upper()}")
+        reasons.append("已有期刊出处")
 
     if CODE_PATTERN.search(blob):
         score += 2
@@ -176,18 +203,15 @@ def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None)
 
     keyword = (candidate.get("keyword") or "").split(" / ")[0]
     if keyword and keyword.lower() in candidate.get("title", "").lower():
-        score += 2
+        score += 1
         reasons.append("标题直接命中关键词")
 
     age = _age_days(candidate.get("published", ""), today=today)
     if age is not None:
         if age <= 7:
-            score += 3
-            reasons.append(f"{age} 天前发布")
-        elif age <= 30:
             score += 2
             reasons.append(f"{age} 天前发布")
-        elif age <= 90:
+        elif age <= 30:
             score += 1
             reasons.append(f"{age} 天前发布")
 

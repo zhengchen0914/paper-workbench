@@ -254,10 +254,51 @@ def test_radar_score_recency_buckets():
         }
         return radar.score_candidate(candidate, today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc))[0]
 
-    assert score_for("2026-09-30") == 3
-    assert score_for("2026-09-20") == 2
-    assert score_for("2026-08-01") == 1
+    # 时效权重下调（质量优先）：7 天内 +2，30 天内 +1，更早不加分
+    assert score_for("2026-09-30") == 2
+    assert score_for("2026-09-20") == 1
+    assert score_for("2026-08-01") == 0
     assert score_for("2026-01-01") == 0
+
+
+def test_radar_quality_outweighs_recency():
+    """用户取向：质量优先、时效次之——老论文只要中了顶会，应该压过新的普通论文。"""
+    today = __import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc)
+    old_venue = {
+        "title": "t",
+        "comment": "Accepted by CVPR 2026",
+        "abstract": "code at https://github.com/x/y",
+        "keyword": "x",
+        "published": "2026-05-01",  # 5 个月前
+    }
+    fresh_plain = {
+        "title": "t",
+        "comment": "",
+        "abstract": "code at https://github.com/x/y",
+        "keyword": "x",
+        "published": "2026-09-30",  # 昨天
+    }
+    old_score = radar.score_candidate(old_venue, today=today)[0]
+    fresh_score = radar.score_candidate(fresh_plain, today=today)[0]
+    assert old_score > fresh_score, (old_score, fresh_score)
+
+
+def test_radar_journal_ref_counts_as_published():
+    """期刊论文的会议线索在 journal_ref 里，不在 comment 里。"""
+    candidate = {
+        "title": "t",
+        "comment": "",
+        "journal_ref": "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+        "abstract": "",
+        "keyword": "x",
+        "published": "2026-09-30",
+    }
+    score, reasons = radar.score_candidate(
+        candidate,
+        today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
+    )
+    assert any("TPAMI" in reason for reason in reasons)
+    assert score >= 7  # 5 顶刊 + 2 时效
 
 
 def test_radar_too_old_filters():

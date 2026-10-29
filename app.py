@@ -929,9 +929,9 @@ def radar_fetch():
             timestamp = db.now()
             db.execute(
                 "INSERT INTO candidates(uid, source, external_id, title, authors, abstract, "
-                "published, url, pdf_url, comment, categories, keyword, score, reasons, "
-                "status, created_at, updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "published, url, pdf_url, comment, journal_ref, categories, keyword, score, "
+                "reasons, status, created_at, updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     db.new_uid("cand"),
                     candidate["source"],
@@ -943,6 +943,7 @@ def radar_fetch():
                     candidate["url"],
                     candidate["pdf_url"],
                     candidate["comment"],
+                    candidate.get("journal_ref", ""),
                     candidate["categories"],
                     candidate["keyword"],
                     candidate["score"],

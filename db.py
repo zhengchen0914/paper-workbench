@@ -329,6 +329,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("drafts", "extract_skip", "INTEGER NOT NULL DEFAULT 0"),
     # 机制英文名：中文译名常是模型意译，英文原名才准
     ("mechanisms", "name_en", "TEXT NOT NULL DEFAULT ''"),
+    # 期刊出处：参会的写在 comment 里，期刊的写在 journal_ref 里
+    ("candidates", "journal_ref", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
