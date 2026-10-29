@@ -316,7 +316,41 @@ def test_radar_journal_ref_counts_as_published():
         today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
     )
     assert any("TPAMI" in reason for reason in reasons)
-    assert score >= 7  # 5 顶刊 + 2 时效
+    assert score >= 6  # 4 顶刊 + 2 时效
+
+
+def test_radar_scores_affiliation():
+    """作者单位是质量侧面证据：强机构 +2，普通机构 +1，查不到不加分。"""
+    today = __import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc)
+
+    def score_for(institutions):
+        candidate = {
+            "title": "t",
+            "comment": "",
+            "abstract": "",
+            "keyword": "x",
+            "published": "2024-01-01",  # 两年前，时效只给 +1
+            "institutions": institutions,
+        }
+        return radar.score_candidate(candidate, today=today)
+
+    top_score, top_reasons = score_for(["Tsinghua University"])
+    plain_score, plain_reasons = score_for(["Some Regional College"])
+    none_score, none_reasons = score_for([])
+
+    assert top_score == plain_score + 1 == none_score + 2
+    assert any("强机构" in reason for reason in top_reasons)
+    assert any("Tsinghua" in reason for reason in top_reasons)
+    assert none_score == 1  # 只有时效分
+
+
+def test_affiliation_tier_matching():
+    import affiliations
+
+    assert affiliations.is_top(["Carnegie Mellon University"]) is True
+    assert affiliations.is_top(["Meta (United States)"]) is True
+    assert affiliations.is_top(["Some Regional College"]) is False
+    assert affiliations.is_top([]) is False
 
 
 def test_radar_too_old_filters():

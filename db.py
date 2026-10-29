@@ -331,6 +331,8 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("mechanisms", "name_en", "TEXT NOT NULL DEFAULT ''"),
     # 期刊出处：参会的写在 comment 里，期刊的写在 journal_ref 里
     ("candidates", "journal_ref", "TEXT NOT NULL DEFAULT ''"),
+    # 作者单位：arXiv 不给，抓取时走 OpenAlex 补，顿号分隔
+    ("candidates", "institutions", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

@@ -16,6 +16,8 @@ from typing import Any
 
 import httpx
 
+import affiliations
+
 ARXIV_API = "https://export.arxiv.org/api/query"
 USER_AGENT = "PaperWorkbench/1.0 (local research tool; contact: local user)"
 
@@ -177,10 +179,11 @@ def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None)
     """可解释的加权打分（满分 10）。每条加分都附一句理由。
 
     权重取向：**质量优先、时效次之**。
-    - 已中顶会/顶刊 +5（最强的质量信号，且可复核）
-    - 开源代码 +2（可复现性，弱质量信号）
+    - 已中顶会/顶刊 +4（最强的质量信号，且可复核）
+    - 作者单位在强机构白名单 +2；有单位信息但不在名单 +1（侧面佐证）
+    - 开源代码 +1（可复现性，最弱的质量信号）
     - 标题命中关键词 +1（只代表相关，不代表质量）
-    - 时效：7 天内 +2 / 30 天内 +1 / 更早 0（追新，但不该压过质量）
+    - 时效：一年内 +2 / 一到三年 +1 / 三年以上 0（并标「过时」）
     """
     score = 0
     reasons: list[str] = []
@@ -194,15 +197,23 @@ def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None)
         (short for short, full in JOURNAL_ALIASES.items() if full in venue_lower), ""
     )
     if venue_name:
-        score += 5
+        score += 4
         reasons.append(f"疑似已中 {venue_name}")
     elif (candidate.get("journal_ref") or "").strip():
         # 有 journal_ref 说明已正式发表，但看不出是哪家
-        score += 3
+        score += 2
         reasons.append("已有期刊出处")
 
-    if CODE_PATTERN.search(blob):
+    institutions = candidate.get("institutions") or []
+    if affiliations.is_top(institutions):
         score += 2
+        reasons.append(f"强机构：{affiliations.describe(institutions)}")
+    elif institutions:
+        score += 1
+        reasons.append(f"机构：{affiliations.describe(institutions)}")
+
+    if CODE_PATTERN.search(blob):
+        score += 1
         reasons.append("附开源代码")
 
     keyword = (candidate.get("keyword") or "").split(" / ")[0]

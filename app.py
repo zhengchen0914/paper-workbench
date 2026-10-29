@@ -896,6 +896,18 @@ def radar_fetch():
     except Exception as exc:  # 网络整体不可用时给出明确提示
         return RedirectResponse(f"/radar?msg=抓取失败：{exc}", status_code=303)
 
+    # 补作者单位（arXiv 不给，走 OpenAlex）。查不到不影响打分，只是少一条证据。
+    try:
+        affiliations.prefetch(found)
+    except Exception as exc:  # 外部库挂了不能拖垮整次抓取
+        print(f"[radar] 单位查询失败: {exc}")
+
+    # 单位是后补的，重算一遍分数与理由
+    for candidate in found:
+        score, reasons = radar.score_candidate(candidate)
+        candidate["score"] = score
+        candidate["reasons"] = reasons
+
     added = updated = 0
     for candidate in found:
         existing = db.one(
@@ -903,11 +915,12 @@ def radar_fetch():
             (candidate["source"], candidate["external_id"]),
         )
         reasons = "；".join(candidate["reasons"])
+        institutions = "、".join(candidate.get("institutions") or [])
         if existing:
             db.execute(
                 "UPDATE candidates SET title=?, authors=?, abstract=?, published=?, "
-                "url=?, pdf_url=?, comment=?, categories=?, keyword=?, score=?, "
-                "reasons=?, updated_at=? WHERE uid=?",
+                "url=?, pdf_url=?, comment=?, journal_ref=?, institutions=?, categories=?, "
+                "keyword=?, score=?, reasons=?, updated_at=? WHERE uid=?",
                 (
                     candidate["title"],
                     candidate["authors"],
@@ -916,6 +929,8 @@ def radar_fetch():
                     candidate["url"],
                     candidate["pdf_url"],
                     candidate["comment"],
+                    candidate.get("journal_ref", ""),
+                    institutions,
                     candidate["categories"],
                     candidate["keyword"],
                     candidate["score"],
@@ -929,9 +944,9 @@ def radar_fetch():
             timestamp = db.now()
             db.execute(
                 "INSERT INTO candidates(uid, source, external_id, title, authors, abstract, "
-                "published, url, pdf_url, comment, journal_ref, categories, keyword, score, "
-                "reasons, status, created_at, updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "published, url, pdf_url, comment, journal_ref, institutions, categories, "
+                "keyword, score, reasons, status, created_at, updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     db.new_uid("cand"),
                     candidate["source"],
@@ -944,6 +959,7 @@ def radar_fetch():
                     candidate["pdf_url"],
                     candidate["comment"],
                     candidate.get("journal_ref", ""),
+                    institutions,
                     candidate["categories"],
                     candidate["keyword"],
                     candidate["score"],
