@@ -243,9 +243,9 @@ def test_radar_metadata_score_is_normalized():
     assert any("CVPR" in reason for reason in reasons)
     assert "附开源代码" in reasons
     assert parts["venue"] == 10 and parts["code"] == 10  # 命中顶会、附代码
-    # CVPR 4.5 + 代码 1.5 + 时效 1.5（2026-09-29 在一周内）= 7.5，没有机构分
-    assert meta == 7.5
-    assert parts["inst"] == 0
+    # CVPR 4.5 + 机构未知 1.0 + 代码 1.5 + 时效 1.5 = 8.5
+    assert meta == 8.5
+    assert parts["inst"] == 4  # 查不到机构按中性处理
 
 
 def test_radar_score_recency_buckets():
@@ -324,8 +324,8 @@ def test_radar_journal_ref_counts_as_published():
         today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
     )
     assert any("TPAMI" in reason for reason in reasons)
-    # 期刊全称认出来了：venue 10 * 0.45 + 时效 10 * 0.15 = 6.0
-    assert score == 6.0
+    # 期刊全称认出来了：venue 4.5 + 机构未知 1.0 + 时效 1.5 = 7.0
+    assert score == 7.0
 
 
 def test_radar_scores_affiliation():
@@ -348,7 +348,7 @@ def test_radar_scores_affiliation():
     plain_score, _, plain_parts = parts_for(["Some Regional College"])
     none_score, _, none_parts = parts_for([])
 
-    assert top_parts["inst"] == 10 and plain_parts["inst"] == 5 and none_parts["inst"] == 0
+    assert top_parts["inst"] == 10 and plain_parts["inst"] == 7 and none_parts["inst"] == 4
     assert top_score > plain_score > none_score
     assert any("强机构" in reason for reason in top_reasons)
 
@@ -388,7 +388,7 @@ def test_metadata_score_accepts_institution_string():
     assert list_parts["inst"] == 10
 
     _, _, empty_parts = radar.metadata_score({**candidate, "institutions": ""}, today=today)
-    assert empty_parts["inst"] == 0
+    assert empty_parts["inst"] == 4  # 没有机构信息按中性处理
 
 
 def test_merge_uses_weighted_score_not_raw_points():

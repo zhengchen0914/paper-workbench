@@ -225,10 +225,13 @@ def metadata_score(
         parts["inst"] = 10.0
         reasons.append(f"强机构：{affiliations.describe(institutions)}")
     elif institutions:
-        parts["inst"] = 5.0
+        parts["inst"] = 7.0
         reasons.append(f"机构：{affiliations.describe(institutions)}")
     else:
-        parts["inst"] = 0.0
+        # 查不到 ≠ 差。OpenAlex 对新预印本有滞后，直接给 0 会系统性冤枉好论文，
+        # 所以按中性偏正处理（4 分），普通机构 7 分，强机构 10 分。
+        # 不往 reasons 里塞「机构未知」——七成论文都这样，会变成噪音。
+        parts["inst"] = 4.0
 
     # 开源代码
     blob = f"{candidate.get('title', '')} {candidate.get('comment', '')} {candidate.get('abstract', '')}"
