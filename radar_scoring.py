@@ -89,9 +89,9 @@ def breakdown(dims: dict[str, int]) -> str:
 
 # 模型给的原始分实际落在 4.8–8.0，不敢给低分。
 # 直接用会让 60% 的权重失去区分度，所以拉伸到全量程：
-# ≤4 归 0，≥9 给满，中间线性映射。
+# ≤4 归 0，≥8.5 给满，中间线性映射。
 RAW_LOW = 4.0
-RAW_HIGH = 9.0
+RAW_HIGH = 8.5
 
 
 def normalize(raw: float) -> float:

@@ -371,11 +371,11 @@ def test_content_score_normalization():
 
     assert radar_scoring.normalize(3.5) == 0.0     # 低于 4 归零
     assert radar_scoring.normalize(4.0) == 0.0
-    assert radar_scoring.normalize(6.5) == 5.0     # 中位拉到中点
-    assert radar_scoring.normalize(4.8) == 1.6
-    assert radar_scoring.normalize(8.0) == 8.0
-    assert radar_scoring.normalize(9.0) == 10.0
-    assert radar_scoring.normalize(9.6) == 10.0    # 超过 9 给满
+    assert radar_scoring.normalize(6.25) == 5.0    # 区间中点
+    assert radar_scoring.normalize(4.8) == 1.78
+    assert radar_scoring.normalize(8.0) == 8.89
+    assert radar_scoring.normalize(8.5) == 10.0
+    assert radar_scoring.normalize(9.6) == 10.0    # 超过 8.5 给满
 
 
 def test_normalization_spreads_compressed_scores():
