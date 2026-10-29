@@ -727,3 +727,13 @@ fieldset input { margin-bottom: 4px; }
 .row-actions { flex-wrap: nowrap; }
 .pill { white-space: nowrap; }
 .table td.row-actions { vertical-align: middle; }
+/* 雷达加权分拆解 */
+.score-badge.pending {
+  background: var(--surface); color: var(--muted);
+  border: 1px dashed var(--line-strong); font-size: 11px;
+}
+.score-split {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft);
+}
+.score-split em { font-style: normal; color: var(--muted); font-size: 11px; }

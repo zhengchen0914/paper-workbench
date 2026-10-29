@@ -333,6 +333,10 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("candidates", "journal_ref", "TEXT NOT NULL DEFAULT ''"),
     # 作者单位：arXiv 不给，抓取时走 OpenAlex 补，顿号分隔
     ("candidates", "institutions", "TEXT NOT NULL DEFAULT ''"),
+    # 加权分拆解：摘要分（模型，60%）、元数据分（40%）、维度明细；-1 表示还没评
+    ("candidates", "content_score", "REAL NOT NULL DEFAULT -1"),
+    ("candidates", "meta_score", "REAL NOT NULL DEFAULT 0"),
+    ("candidates", "score_detail", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

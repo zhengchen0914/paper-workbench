@@ -35,8 +35,12 @@
 {% for c in candidates %}
   <article class="cand">
     <div class="cand-head">
-      <span class="score-badge {{ 'high' if c.score >= 7 else ('mid' if c.score >= 4 else 'low') }}"
-            title="可解释加权分：顶会 4 / 强机构 2 / 开源 1 / 标题命中 1 / 时效 2">{{ c.score }}</span>
+      {% if c.content_score is not none and c.content_score >= 0 %}
+      <span class="score-badge {{ 'high' if c.score >= 6 else ('mid' if c.score >= 4 else 'low') }}"
+            title="加权分 = 摘要 {{ '%.1f' | format(c.content_score) }} × 60% + 元数据 {{ '%.1f' | format(c.meta_score) }} × 40%">{{ '%.1f' | format(c.score) }}</span>
+      {% else %}
+      <span class="score-badge pending" title="摘要还没评分，当前只显示元数据分">待评</span>
+      {% endif %}
       <h3><a href="{{ c.url }}" target="_blank" rel="noreferrer">{{ c.title }}</a></h3>
     </div>
     <p class="cand-meta">
@@ -46,6 +50,13 @@
       {% if c.institutions %}<span class="kw">单位：{{ c.institutions }}</span>{% endif %}
       {% if c.keyword %}<span class="kw">命中：{{ c.keyword }}</span>{% endif %}
     </p>
+    {% if c.content_score is not none and c.content_score >= 0 %}
+    <p class="score-split">
+      <span>摘要 {{ '%.1f' | format(c.content_score) }} <em>×60%</em></span>
+      <span>元数据 {{ '%.1f' | format(c.meta_score) }} <em>×40%</em></span>
+      {% if c.score_detail %}<span class="muted">{{ c.score_detail }}</span>{% endif %}
+    </p>
+    {% endif %}
     {% if c.reasons %}
     <p class="reasons">
       {% for r in c.reasons.split('；') %}<span class="reason-chip">{{ r }}</span>{% endfor %}

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import queue
+import time
 import threading
 from typing import Any
 
@@ -23,6 +24,8 @@ import llm
 import packaging
 import pdfx
 import prompts
+import radar
+import radar_scoring
 
 _QUEUE: queue.Queue[tuple[str, str, dict[str, Any]]] = queue.Queue()
 _WORKER_LOCK = threading.Lock()
@@ -76,6 +79,8 @@ def _worker_loop() -> None:
                     payload["github"],
                     payload["papers"],
                 )
+            elif kind == "radar":
+                _run_radar(job_uid, payload["limit"])
         except Exception as exc:  # 兜底：worker 不能因为单个作业死掉
             _set_job(job_uid, "failed", str(exc) or exc.__class__.__name__)
         finally:
@@ -659,6 +664,103 @@ def _run_insights(job_uid: str, draft_uid: str) -> None:
         message = str(exc) or exc.__class__.__name__
         _set_job(job_uid, "failed", message)
         db.log_event(draft_uid, "insights:failed", message)
+
+
+# ---------------------------------------------------------------- 雷达评分
+
+
+def start_radar_scoring(limit: int = 40) -> str | None:
+    """把「读摘要打质量分」排进队列。没有待评分的直接返回 None。"""
+    pending = db.one(
+        "SELECT COUNT(*) AS n FROM candidates WHERE content_score < 0"
+    )
+    if not pending or not pending["n"]:
+        return None
+
+    job_uid = db.new_uid("job")
+    db.execute(
+        "INSERT INTO jobs(uid, kind, status, message, created_at) VALUES(?,?,?,?,?)",
+        (job_uid, "radar", "queued", "排队中", db.now()),
+    )
+    _ensure_worker()
+    _QUEUE.put(("radar", job_uid, {"limit": limit}))
+    return job_uid
+
+
+def _run_radar(job_uid: str, limit: int) -> None:
+    try:
+        rows = db.query(
+            "SELECT * FROM candidates WHERE content_score < 0 "
+            "ORDER BY published DESC LIMIT ?",
+            (limit,),
+        )
+        if not rows:
+            _set_job(job_uid, "done", "没有待评分的候选")
+            return
+
+        config = llm.config_from_settings(db.get_settings())
+        settings = db.get_settings()
+
+        # 免费档的模型 RPM 很低（实测 1 分钟只能过 1–2 次），
+        # 所以默认慢速跑：每次之间留间隔，撞到 429 就退避重试，
+        # 而不是把整批打成失败。
+        try:
+            interval = float(settings.get("radar_score_interval") or 20)
+        except (TypeError, ValueError):
+            interval = 20.0
+
+        done = 0
+        failed = 0
+        for index, row in enumerate(rows, 1):
+            _set_job(job_uid, "running", f"读摘要评分 {index}/{len(rows)}…")
+            parsed = None
+            for attempt in range(4):
+                try:
+                    raw = llm.chat_once(config, radar_scoring.build_messages(row))
+                    parsed = radar_scoring.parse(raw)
+                    break
+                except Exception as exc:
+                    message = str(exc)
+                    if "429" in message or "rate" in message.lower():
+                        wait = interval * (attempt + 1)
+                        _set_job(
+                            job_uid,
+                            "running",
+                            f"限流，等待 {int(wait)}s 后重试（{index}/{len(rows)}）…",
+                        )
+                        time.sleep(wait)
+                        continue
+                    print(f"[radar] 评分失败 {row['title'][:30]}: {message}")
+                    break
+
+            if parsed is None:
+                failed += 1
+            else:
+                meta, reasons, _ = radar.metadata_score(row)
+                final = radar.combine_scores(parsed["score"], meta)
+                db.execute(
+                    "UPDATE candidates SET content_score=?, meta_score=?, score=?, "
+                    "score_detail=?, reasons=?, updated_at=? WHERE uid=?",
+                    (
+                        parsed["score"],
+                        meta,
+                        final,
+                        radar_scoring.breakdown(parsed["dims"]),
+                        "；".join(reasons),
+                        db.now(),
+                        row["uid"],
+                    ),
+                )
+                done += 1
+
+            # 两篇之间留间隔，避免连续撞限流
+            if index < len(rows):
+                time.sleep(interval)
+
+        tail = f"，失败 {failed} 篇（多为限流）" if failed else ""
+        _set_job(job_uid, "done", f"已评分 {done} 篇{tail}")
+    except Exception as exc:
+        _set_job(job_uid, "failed", str(exc) or exc.__class__.__name__)
 
 
 # ---------------------------------------------------------------- 物料与工具

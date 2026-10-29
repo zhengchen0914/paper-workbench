@@ -175,21 +175,30 @@ def _to_candidate(entry: ET.Element, keyword: str) -> dict[str, Any] | None:
     return candidate
 
 
-def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None) -> tuple[int, list[str]]:
-    """可解释的加权打分（满分 10）。每条加分都附一句理由。
+# 元数据侧的权重（合计 1.0），最终与摘要分按 40/60 合成
+META_WEIGHTS = {
+    "venue": 0.45,   # 顶会/顶刊
+    "inst": 0.25,    # 作者单位
+    "code": 0.15,    # 开源代码
+    "fresh": 0.15,   # 时效
+}
 
-    权重取向：**质量优先、时效次之**。
-    - 已中顶会/顶刊 +4（最强的质量信号，且可复核）
-    - 作者单位在强机构白名单 +2；有单位信息但不在名单 +1（侧面佐证）
-    - 开源代码 +1（可复现性，最弱的质量信号）
-    - 标题命中关键词 +1（只代表相关，不代表质量）
-    - 时效：一年内 +2 / 一到三年 +1 / 三年以上 0（并标「过时」）
+CONTENT_WEIGHT = 0.60
+META_WEIGHT = 0.40
+
+
+def metadata_score(
+    candidate: dict[str, Any], *, today: datetime | None = None
+) -> tuple[float, list[str], dict[str, float]]:
+    """元数据分（0–10），不掺摘要判断。返回 (分, 理由, 各维度)。
+
+    每个维度先归一化到 0–10，再加权——这样各项可比，不会因为「多打几条标签」
+    就把分数堆上去。
     """
-    score = 0
     reasons: list[str] = []
+    parts: dict[str, float] = {}
 
-    blob = f"{candidate.get('title', '')} {candidate.get('comment', '')} {candidate.get('abstract', '')}"
-
+    # 顶会/顶刊
     venue_text = f"{candidate.get('comment', '') or ''} {candidate.get('journal_ref', '') or ''}"
     venue_match = VENUE_PATTERN.search(venue_text)
     venue_lower = venue_text.lower()
@@ -197,43 +206,62 @@ def score_candidate(candidate: dict[str, Any], *, today: datetime | None = None)
         (short for short, full in JOURNAL_ALIASES.items() if full in venue_lower), ""
     )
     if venue_name:
-        score += 4
+        parts["venue"] = 10.0
         reasons.append(f"疑似已中 {venue_name}")
     elif (candidate.get("journal_ref") or "").strip():
-        # 有 journal_ref 说明已正式发表，但看不出是哪家
-        score += 2
+        parts["venue"] = 7.0
         reasons.append("已有期刊出处")
+    else:
+        parts["venue"] = 0.0
 
+    # 作者单位
     institutions = candidate.get("institutions") or []
     if affiliations.is_top(institutions):
-        score += 2
+        parts["inst"] = 10.0
         reasons.append(f"强机构：{affiliations.describe(institutions)}")
     elif institutions:
-        score += 1
+        parts["inst"] = 5.0
         reasons.append(f"机构：{affiliations.describe(institutions)}")
+    else:
+        parts["inst"] = 0.0
 
+    # 开源代码
+    blob = f"{candidate.get('title', '')} {candidate.get('comment', '')} {candidate.get('abstract', '')}"
     if CODE_PATTERN.search(blob):
-        score += 1
+        parts["code"] = 10.0
         reasons.append("附开源代码")
+    else:
+        parts["code"] = 0.0
 
-    keyword = (candidate.get("keyword") or "").split(" / ")[0]
-    if keyword and keyword.lower() in candidate.get("title", "").lower():
-        score += 1
-        reasons.append("标题直接命中关键词")
-
+    # 时效（按年）
     age = _age_days(candidate.get("published", ""), today=today)
-    if age is not None:
-        # 以年为单位：一年内（含半年）算新，一到三年算过渡，三年以上算过时
-        if age <= FRESH_DAYS:
-            score += 2
-            reasons.append(f"{age} 天前发布（一年内）")
-        elif age <= STALE_DAYS:
-            score += 1
-            reasons.append(f"{age // 365} 年前发布")
-        else:
-            reasons.append("超过 3 年，按过时处理")
+    if age is None:
+        parts["fresh"] = 0.0
+    elif age <= FRESH_DAYS:
+        parts["fresh"] = 10.0
+        reasons.append(f"{age} 天前发布（一年内）")
+    elif age <= STALE_DAYS:
+        parts["fresh"] = 6.0
+        reasons.append(f"{age // 365} 年前发布")
+    else:
+        parts["fresh"] = 2.0
+        reasons.append("超过 3 年，按过时处理")
 
-    return min(score, 10), reasons
+    total = sum(parts[key] * weight for key, weight in META_WEIGHTS.items())
+    return round(total, 1), reasons, parts
+
+
+def combine_scores(content: float, meta: float) -> float:
+    """摘要分占 60%、元数据占 40%，合成 0–10 的加权总分。"""
+    return round(content * CONTENT_WEIGHT + meta * META_WEIGHT, 1)
+
+
+def score_candidate(
+    candidate: dict[str, Any], *, today: datetime | None = None
+) -> tuple[float, list[str]]:
+    """只算元数据分（兼容旧调用）；完整分要用 combine_scores。"""
+    total, reasons, _ = metadata_score(candidate, today=today)
+    return total, reasons
 
 
 def _age_days(published: str, *, today: datetime | None = None) -> int | None:

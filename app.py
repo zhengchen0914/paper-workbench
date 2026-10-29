@@ -973,9 +973,15 @@ def radar_fetch():
 
     db.save_settings({"radar_last_fetch": db.now()})
     db.log_event("radar", "fetch", f"新增 {added} / 更新 {updated}")
+
+    # 摘要分要调模型，交给后台队列，别把抓取请求挂在线上
+    queued = jobs.start_radar_scoring(limit=max(20, added + updated))
+
     suffix = f"，{len(errors)} 个关键词失败" if errors else ""
+    tail = "，已在后台读摘要打分" if queued else ""
     return RedirectResponse(
-        f"/radar?msg=抓取完成：新增 {added} 篇，更新 {updated} 篇{suffix}", status_code=303
+        f"/radar?msg=抓取完成：新增 {added} 篇，更新 {updated} 篇{suffix}{tail}",
+        status_code=303,
     )
 
 

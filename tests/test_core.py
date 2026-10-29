@@ -234,17 +234,22 @@ def test_radar_parses_entry_fields():
     assert candidate["categories"] == "cs.CV"
 
 
-def test_radar_scores_venue_code_and_title_match():
+def test_radar_metadata_score_is_normalized():
+    """元数据分是 0–10 的加权分：顶会 0.45、机构 0.25、代码 0.15、时效 0.15。"""
     candidate = radar._to_candidate(_entry(), "surface defect detection")
-    reasons = candidate["reasons"]
+    today = __import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc)
+    meta, reasons, parts = radar.metadata_score(candidate, today=today)
+
     assert any("CVPR" in reason for reason in reasons)
     assert "附开源代码" in reasons
-    assert "标题直接命中关键词" in reasons
-    assert candidate["score"] >= 7
+    assert parts["venue"] == 10 and parts["code"] == 10  # 命中顶会、附代码
+    # CVPR 4.5 + 代码 1.5 + 时效 1.5（2026-09-29 在一周内）= 7.5，没有机构分
+    assert meta == 7.5
+    assert parts["inst"] == 0
 
 
 def test_radar_score_recency_buckets():
-    def score_for(published: str) -> int:
+    def fresh_part(published: str) -> float:
         candidate = {
             "title": "t",
             "comment": "",
@@ -252,15 +257,18 @@ def test_radar_score_recency_buckets():
             "keyword": "x",
             "published": published,
         }
-        return radar.score_candidate(candidate, today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc))[0]
+        _, _, parts = radar.metadata_score(
+            candidate,
+            today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
+        )
+        return parts["fresh"]
 
-    # 时效以年为单位：一年内（含半年）算新 +2，一到三年 +1，三年以上 0
-    assert score_for("2026-09-30") == 2   # 1 天
-    assert score_for("2026-05-01") == 2   # 5 个月，仍算新
-    assert score_for("2025-12-01") == 2   # 10 个月，仍算新
-    assert score_for("2025-06-01") == 1   # 1 年 4 个月，过渡
-    assert score_for("2023-10-02") == 1   # 快 3 年，过渡
-    assert score_for("2021-01-01") == 0   # 超过 3 年，过时
+    # 时效以年为单位：一年内 10 分、一到三年 6 分、三年以上 2 分（均归一化到 0–10）
+    assert fresh_part("2026-09-30") == 10   # 1 天
+    assert fresh_part("2026-05-01") == 10   # 5 个月
+    assert fresh_part("2025-12-01") == 10   # 10 个月
+    assert fresh_part("2025-06-01") == 6    # 1 年 4 个月
+    assert fresh_part("2021-01-01") == 2    # 超过 3 年
 
 
 def test_radar_marks_stale_paper_as_outdated():
@@ -271,34 +279,34 @@ def test_radar_marks_stale_paper_as_outdated():
         "keyword": "x",
         "published": "2020-01-01",
     }
-    score, reasons = radar.score_candidate(
+    meta, reasons, parts = radar.metadata_score(
         candidate,
         today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
     )
-    assert score == 0
+    assert parts["fresh"] == 2
     assert any("过时" in reason for reason in reasons)
 
 
 def test_radar_quality_outweighs_recency():
-    """用户取向：质量优先、时效次之——老论文只要中了顶会，应该压过新的普通论文。"""
+    """老论文只要中了顶会，元数据分应压过新的普通论文。"""
     today = __import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc)
     old_venue = {
         "title": "t",
         "comment": "Accepted by CVPR 2026",
-        "abstract": "code at https://github.com/x/y",
+        "abstract": "",
         "keyword": "x",
         "published": "2026-05-01",  # 5 个月前
     }
     fresh_plain = {
         "title": "t",
         "comment": "",
-        "abstract": "code at https://github.com/x/y",
+        "abstract": "",
         "keyword": "x",
         "published": "2026-09-30",  # 昨天
     }
-    old_score = radar.score_candidate(old_venue, today=today)[0]
-    fresh_score = radar.score_candidate(fresh_plain, today=today)[0]
-    assert old_score > fresh_score, (old_score, fresh_score)
+    old_meta = radar.metadata_score(old_venue, today=today)[0]
+    fresh_meta = radar.metadata_score(fresh_plain, today=today)[0]
+    assert old_meta > fresh_meta, (old_meta, fresh_meta)
 
 
 def test_radar_journal_ref_counts_as_published():
@@ -316,32 +324,43 @@ def test_radar_journal_ref_counts_as_published():
         today=__import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc),
     )
     assert any("TPAMI" in reason for reason in reasons)
-    assert score >= 6  # 4 顶刊 + 2 时效
+    # 期刊全称认出来了：venue 10 * 0.45 + 时效 10 * 0.15 = 6.0
+    assert score == 6.0
 
 
 def test_radar_scores_affiliation():
-    """作者单位是质量侧面证据：强机构 +2，普通机构 +1，查不到不加分。"""
+    """作者单位是质量侧面证据：强机构给满分，普通机构给一半，查不到 0。"""
     today = __import__("datetime").datetime(2026, 10, 1, tzinfo=__import__("datetime").timezone.utc)
 
-    def score_for(institutions):
+    def parts_for(institutions):
         candidate = {
             "title": "t",
             "comment": "",
             "abstract": "",
             "keyword": "x",
-            "published": "2024-01-01",  # 两年前，时效只给 +1
+            "published": "2024-01-01",  # 两年前，时效 6 分
             "institutions": institutions,
         }
-        return radar.score_candidate(candidate, today=today)
+        score, reasons, parts = radar.metadata_score(candidate, today=today)
+        return score, reasons, parts
 
-    top_score, top_reasons = score_for(["Tsinghua University"])
-    plain_score, plain_reasons = score_for(["Some Regional College"])
-    none_score, none_reasons = score_for([])
+    top_score, top_reasons, top_parts = parts_for(["Tsinghua University"])
+    plain_score, _, plain_parts = parts_for(["Some Regional College"])
+    none_score, _, none_parts = parts_for([])
 
-    assert top_score == plain_score + 1 == none_score + 2
+    assert top_parts["inst"] == 10 and plain_parts["inst"] == 5 and none_parts["inst"] == 0
+    assert top_score > plain_score > none_score
     assert any("强机构" in reason for reason in top_reasons)
-    assert any("Tsinghua" in reason for reason in top_reasons)
-    assert none_score == 1  # 只有时效分
+
+
+def test_merge_uses_weighted_score_not_raw_points():
+    """摘要分 60% + 元数据 40%，6 分才及格。"""
+    assert radar.combine_scores(10, 10) == 10.0
+    assert radar.combine_scores(6, 6) == 6.0
+    # 摘要很一般（5）但元数据满分（10）→ 7.0，说明元数据不能单独把烂摘要抬过线
+    assert radar.combine_scores(5, 10) == 7.0
+    # 摘要很好（9）但元数据 0 → 5.4，不到及格线
+    assert radar.combine_scores(9, 0) == 5.4
 
 
 def test_affiliation_tier_matching():
