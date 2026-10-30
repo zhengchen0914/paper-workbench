@@ -705,9 +705,9 @@ def _run_radar(job_uid: str, limit: int) -> None:
         # 所以默认慢速跑：每次之间留间隔，撞到 429 就退避重试，
         # 而不是把整批打成失败。
         try:
-            interval = float(settings.get("radar_score_interval") or 20)
+            interval = float(settings.get("radar_score_interval") or 8)
         except (TypeError, ValueError):
-            interval = 20.0
+            interval = 8.0
 
         done = 0
         failed = 0

@@ -226,6 +226,9 @@ DEFAULT_SETTINGS: dict[str, str] = {
     ),
     "radar_per_keyword": "15",
     "radar_max_age_days": "1095",
+    # 摘要评分两次调用之间的间隔（秒）。实测突发约 4 次、之后约 1 次/5 秒，
+    # 留余量取 8 秒；撞到 429 时作业会退避重试
+    "radar_score_interval": "8",
     "radar_last_fetch": "",
     "github_token": "",
 }
