@@ -229,6 +229,9 @@ DEFAULT_SETTINGS: dict[str, str] = {
     # 摘要评分两次调用之间的间隔（秒）。实测突发约 4 次、之后约 1 次/5 秒，
     # 留余量取 8 秒；撞到 429 时作业会退避重试
     "radar_score_interval": "8",
+    # 自动配图：文章生成完自动按小节配几张图（0 关 / 1 开）
+    "illustration_auto": "1",
+    "illustration_count": "3",
     "radar_last_fetch": "",
     "github_token": "",
 }

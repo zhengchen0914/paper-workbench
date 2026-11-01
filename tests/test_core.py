@@ -7,6 +7,7 @@ import json
 
 import export
 import github_boards
+import illustration
 import knowledge
 import packaging
 import pdfx
@@ -435,9 +436,66 @@ def test_affiliation_tier_matching():
 
 
 def test_radar_too_old_filters():
-    assert radar._too_old("2026-01-01", 30) is True
-    assert radar._too_old("2026-09-30", 30) is False
-    assert radar._too_old("2026-01-01", 0) is False
+    # 用相对日期，别写死——写死会随日历推移突然失败（踩过一次）
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=60)).strftime("%Y-%m-%d")
+    recent = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    assert radar._too_old(old, 30) is True
+    assert radar._too_old(recent, 30) is False
+    assert radar._too_old(old, 0) is False  # 0 表示不限
+
+
+# ---------------------------------------------------------------- 自动配图
+
+
+def test_illustration_pick_sections_skips_wrapups():
+    markdown = (
+        "# 标题\n\n"
+        "## 引言\n正文\n\n"
+        "## 第一节\n正文\n\n"
+        "## 第二节\n正文\n\n"
+        "## 第三节\n正文\n\n"
+        "## 写在最后\n正文\n"
+    )
+    picked = illustration.pick_sections(markdown, 2)
+    titles = [title for title, _ in picked]
+    assert "引言" not in titles and "写在最后" not in titles
+    assert len(titles) == 2
+
+
+def test_illustration_pick_sections_spreads():
+    markdown = "".join(f"## 第{i}节\n正文\n\n" for i in range(1, 7))
+    picked = illustration.pick_sections(markdown, 3)
+    assert len(picked) == 3
+    # 均匀取样，不该全挤在前三节
+    indexes = [line for _, line in picked]
+    assert indexes[0] < indexes[1] < indexes[2]
+    assert indexes[2] > 10
+
+
+def test_illustration_insert_image_after_first_paragraph():
+    markdown = "## 第一节\n\n第一段正文。\n\n第二段正文。\n\n## 第二节\n\n另一段。\n"
+    result = illustration.insert_image(markdown, 0, alt="配图", src="/assets/x/1.jpg")
+    lines = result.splitlines()
+    image_at = next(i for i, line in enumerate(lines) if line.startswith("!["))
+    first_para = next(i for i, line in enumerate(lines) if "第一段正文" in line)
+    second_para = next(i for i, line in enumerate(lines) if "第二段正文" in line)
+    assert first_para < image_at < second_para
+    assert "![配图](/assets/x/1.jpg)" in result
+
+
+def test_illustration_prompt_mentions_heading_and_style():
+    prompt = illustration.build_prompt("掩码注意力", "异常检测十年")
+    assert "掩码注意力" in prompt
+    assert "异常检测十年" in prompt
+    assert "不要出现任何文字" in prompt
+
+
+def test_illustration_detects_existing_images():
+    assert illustration.already_illustrated("正文\n\n![图](/assets/x/1.jpg)\n") is True
+    assert illustration.already_illustrated("正文没有图\n") is False
 
 
 # ---------------------------------------------------------------- 结构模板

@@ -149,6 +149,14 @@
   </form>
   {% endif %}
   <a class="btn" href="/article/{{ article.uid }}/export" target="_blank">打开粘贴页</a>
+  <form method="post" action="/article/{{ article.uid }}/illustrate" class="inline">
+    <select name="count" title="生成几张">
+      <option value="2">2 张</option>
+      <option value="3" selected>3 张</option>
+      <option value="4">4 张</option>
+    </select>
+    <button class="btn" type="submit" title="按小节标题生成配图并插进正文">自动配图</button>
+  </form>
   <form method="post" action="/article/{{ article.uid }}/export-to-folder" class="inline">
     <button class="btn primary" type="submit" title="导出交付包与 HTML 到 data/exports 并打开文件夹">导出到文件夹</button>
   </form>

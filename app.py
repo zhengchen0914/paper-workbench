@@ -811,6 +811,22 @@ def build_package(bundle: dict[str, Any]) -> tuple[bytes, str]:
     return buffer.getvalue(), filename
 
 
+@app.post("/article/{uid}/illustrate")
+def article_illustrate(uid: str, count: int = Form(default=3), force: int = Form(default=0)):
+    """按小节标题自动生成配图并插入正文。"""
+    try:
+        jobs.start_illustration(uid, count=max(1, min(6, count)), force=bool(force))
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        return RedirectResponse(
+            _back_with(f"/article/{uid}", "err", message), status_code=303
+        )
+    return RedirectResponse(
+        _back_with(f"/article/{uid}", "msg", "已排入队列，正在按小节生成配图"),
+        status_code=303,
+    )
+
+
 @app.post("/article/{uid}/export-to-folder")
 def article_export_to_folder(uid: str):
     """把交付包写到 data/exports 并打开文件夹——比浏览器静默下载更有反馈。"""

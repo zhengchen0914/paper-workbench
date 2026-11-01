@@ -19,6 +19,7 @@ import threading
 from typing import Any
 
 import db
+import illustration
 import knowledge
 import llm
 import packaging
@@ -79,6 +80,8 @@ def _worker_loop() -> None:
                     payload["github"],
                     payload["papers"],
                 )
+            elif kind == "illustration":
+                _run_illustration(job_uid, payload["article_uid"], payload["count"])
             elif kind == "radar":
                 _run_radar(job_uid, payload["limit"])
         except Exception as exc:  # 兜底：worker 不能因为单个作业死掉
@@ -361,6 +364,18 @@ def _run_article(
         )
         _set_job(job_uid, "done", f"完成：正文 {len(body)} 字，标题候选 {len(meta['titles'])} 个")
         db.log_event(article_uid, "article:done", f"{len(body)} 字")
+
+        # 自动配图：正文写完就排队，失败了也不该把文章标成失败
+        settings = db.get_settings()
+        if settings.get("illustration_auto", "1") == "1":
+            try:
+                count = int(float(settings.get("illustration_count") or 3))
+            except (TypeError, ValueError):
+                count = 3
+            try:
+                start_illustration(article_uid, count=count)
+            except Exception as exc:
+                print(f"[article] 自动配图未触发: {exc}")
 
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
@@ -664,6 +679,89 @@ def _run_insights(job_uid: str, draft_uid: str) -> None:
         message = str(exc) or exc.__class__.__name__
         _set_job(job_uid, "failed", message)
         db.log_event(draft_uid, "insights:failed", message)
+
+
+# ---------------------------------------------------------------- 自动配图
+
+
+def start_illustration(article_uid: str, *, count: int = 3, force: bool = False) -> str:
+    """给文章生成配图并插入正文，排进队列。"""
+    article = db.one("SELECT * FROM drafts WHERE uid=? AND kind='article'", (article_uid,))
+    if article is None:
+        raise ValueError("文章不存在")
+    if not (article["content"] or "").strip():
+        raise ValueError("文章正文为空，先写正文再配图")
+    if not force and illustration.already_illustrated(article["content"]):
+        raise RuntimeError("这篇已经有配图了；要重配请先手动删掉图片行")
+
+    job_uid = db.new_uid("job")
+    db.execute(
+        "INSERT INTO jobs(uid, kind, draft_uid, status, message, created_at) "
+        "VALUES(?,?,?,?,?,?)",
+        (job_uid, "illustration", article_uid, "queued", "排队中", db.now()),
+    )
+    db.log_event(article_uid, "illustration:queued", f"count={count}")
+
+    _ensure_worker()
+    _QUEUE.put(("illustration", job_uid, {"article_uid": article_uid, "count": count}))
+    return job_uid
+
+
+def _run_illustration(job_uid: str, article_uid: str, count: int) -> None:
+    try:
+        article = db.one("SELECT * FROM drafts WHERE uid=?", (article_uid,))
+        if article is None:
+            raise RuntimeError("文章不存在")
+
+        markdown = article["content"] or ""
+        sections = illustration.pick_sections(markdown, count)
+        if not sections:
+            raise RuntimeError("正文里没有二级标题（## ），无法定位插图位置")
+
+        _set_job(job_uid, "running", f"准备生成 {len(sections)} 张配图…")
+        out_dir = db.ASSETS_DIR / article_uid
+        made: list[tuple[str, str, int]] = []  # (标题, 文件名, 行号)
+        errors: list[str] = []
+
+        # 从后往前插，行号不会因为前面的插入而错位
+        for index, (heading, line_index) in enumerate(reversed(sections), 1):
+            label = f"配图 {len(sections) - index + 1}"
+            _set_job(job_uid, "running", f"正在画「{heading[:18]}」…")
+            try:
+                url = illustration.generate(
+                    illustration.build_prompt(heading, article["title"] or "")
+                )
+                target = out_dir / f"gen_{len(sections) - index + 1}.png"
+                illustration.download(url, target)
+                if illustration.crop_16x9(target):
+                    target = target.with_suffix(".jpg")
+                made.append((heading, target.name, line_index))
+            except Exception as exc:  # 单张失败不影响其余
+                errors.append(f"{heading[:14]}：{exc}")
+                print(f"[illustration] 失败 {heading[:20]}: {exc}")
+
+        if not made:
+            raise RuntimeError("一张都没生成成功：" + "；".join(errors[:3]))
+
+        for heading, filename, line_index in made:
+            markdown = illustration.insert_image(
+                markdown,
+                line_index,
+                alt=heading,
+                src=f"/assets/{article_uid}/{filename}",
+            )
+
+        db.execute(
+            "UPDATE drafts SET content=?, updated_at=? WHERE uid=?",
+            (markdown, db.now(), article_uid),
+        )
+        db.log_event(article_uid, "illustration:done", f"{len(made)} 张")
+        tail = f"，{len(errors)} 张失败" if errors else ""
+        _set_job(job_uid, "done", f"已插入 {len(made)} 张配图{tail}")
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        _set_job(job_uid, "failed", message)
+        db.log_event(article_uid, "illustration:failed", message)
 
 
 # ---------------------------------------------------------------- 雷达评分
