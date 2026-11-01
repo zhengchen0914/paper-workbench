@@ -565,10 +565,28 @@ def article_bundle(uid: str) -> dict[str, Any] | None:
 
 
 @app.get("/article/{uid}", response_class=HTMLResponse)
-def article_review(request: Request, uid: str, msg: str = "") -> Response:
+def article_review(request: Request, uid: str, msg: str = "", err: str = "") -> Response:
     bundle = article_bundle(uid)
     if bundle is None:
         return RedirectResponse("/drafts", status_code=303)
+
+    # 配图作业的实时状态优先于 URL 里的静态提示：
+    # ?msg=已排入队列 是重定向那一刻的快照，作业早跑完了它还挂着，会误导人。
+    illu = db.one(
+        "SELECT status, message FROM jobs WHERE kind='illustration' AND draft_uid=? "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (uid,),
+    )
+    illustration_running = False
+    if illu:
+        if illu["status"] in ("queued", "running"):
+            msg = illu["message"] or "正在生成配图…"
+            illustration_running = True
+        elif illu["status"] == "done" and msg.startswith("已排入队列"):
+            msg = illu["message"]
+        elif illu["status"] == "failed" and (msg.startswith("已排入队列") or not err):
+            err = f"配图失败：{illu['message']}"
+
     return render(
         request,
         "article.html",
@@ -577,6 +595,8 @@ def article_review(request: Request, uid: str, msg: str = "") -> Response:
         job=jobs.latest_job(uid),
         has_key=bool(db.get_settings().get("llm_api_key")),
         msg=msg,
+        err=err,
+        illustration_running=illustration_running,
     )
 
 
