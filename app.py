@@ -892,6 +892,37 @@ def build_package(bundle: dict[str, Any]) -> tuple[bytes, str]:
     return buffer.getvalue(), filename
 
 
+@app.post("/article/{uid}/regenerate")
+def article_regenerate(uid: str, engine: str = Form(default="builtin")):
+    """重新生成正文。
+
+    主要给两种稿子用：`awaiting`（当初选了「交给 DSH」，但外部没产出）
+    和 `failed`（生成失败）。两者在页面上都没有别的按钮可用。
+    """
+    article = db.one("SELECT * FROM drafts WHERE uid=? AND kind='article'", (uid,))
+    if article is None:
+        return RedirectResponse("/drafts?kind=article&err=文章不存在", status_code=303)
+    if not article["parent_uid"]:
+        return RedirectResponse(
+            _back_with(f"/article/{uid}", "err", "找不到来源解读，无法重新生成"),
+            status_code=303,
+        )
+    try:
+        jobs.start_article(
+            article["parent_uid"],
+            engine=engine,
+            preset=article["preset"] or "deep",
+        )
+    except Exception as exc:
+        return RedirectResponse(
+            _back_with(f"/article/{uid}", "err", str(exc) or "启动失败"), status_code=303
+        )
+    return RedirectResponse(
+        _back_with(f"/article/{uid}", "msg", "已排入队列，正在生成正文"),
+        status_code=303,
+    )
+
+
 @app.post("/article/{uid}/illustrate")
 def article_illustrate(uid: str, count: int = Form(default=3), force: int = Form(default=0)):
     """按小节标题自动生成配图并插入正文。"""

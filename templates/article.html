@@ -39,6 +39,22 @@
 
 <!-- 地址栏清理已移到 base.html，全站生效 -->
 
+{% if article.status in ('awaiting', 'failed') %}
+<div class="banner warn">
+  <strong>{{ status_labels.get(article.status, article.status) }}</strong>
+  {% if article.engine == 'dsh' %}
+    —— 这份稿子当初选了「交给 DSH」，需要外部 DSH 产出后才会填内容，工作台这边一直在等。
+  {% else %}
+    —— 上次生成没成功。
+  {% endif %}
+  可以直接用内置模型重跑：
+  <form method="post" action="/article/{{ article.uid }}/regenerate" class="inline" style="margin-left:8px">
+    <input type="hidden" name="engine" value="builtin">
+    <button class="btn tiny primary" type="submit">用内置模型生成</button>
+  </form>
+</div>
+{% endif %}
+
 {% if article.status == 'running' %}
   {% include "_article_panel.html" %}
 {% endif %}
