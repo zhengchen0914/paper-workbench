@@ -8,6 +8,7 @@ data/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+pytest-of-*/
 *.egg-info/
 
 # 编辑器 / 系统

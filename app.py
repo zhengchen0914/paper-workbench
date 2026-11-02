@@ -35,6 +35,7 @@ import github_boards
 import jobs
 import knowledge
 import llm
+import media
 import packaging
 import pdfx
 import prompts
@@ -401,7 +402,8 @@ def write_draft_file(draft: dict[str, Any]) -> Path:
     """把稿件写成磁盘文件，返回路径。
 
     解读存 .md（带 BOM，Windows 记事本打开中文不乱码）；
-    公众号文章额外存一份自包含 .html，双击就能看排版效果。
+    公众号文章额外存一份自包含 .html：正文里的图片直接转成 data URL 内嵌，
+    这样单个文件拷到哪都能打开，不会因为 /assets/ 绝对路径变成破图。
     """
     db.EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     title = _safe_filename(draft.get("title") or draft["uid"])
@@ -413,8 +415,11 @@ def write_draft_file(draft: dict[str, Any]) -> Path:
             body_html=body,
             meta={"theme": draft.get("theme") or "classic"},
         )
+        page, inlined = media.inline_as_data_urls(page)
         path = db.EXPORT_DIR / f"{title}.html"
         path.write_text(page, encoding="utf-8")
+        if inlined:
+            print(f"[export] {title[:24]}… 内嵌 {inlined} 张图")
         return path
     path = db.EXPORT_DIR / f"{title}.md"
     path.write_text(content, encoding="utf-8-sig")
@@ -791,10 +796,16 @@ def export_package(uid: str) -> Response:
 
 
 def build_package(bundle: dict[str, Any]) -> tuple[bytes, str]:
-    """打包交付物：正文 md/html + 物料.json + 配图。返回 (zip 字节, 文件名)。"""
+    """打包交付物：正文 md/html + 物料.json + 配图。返回 (zip 字节, 文件名)。
+
+    正文里的 `/assets/...` 是服务端绝对路径，出包后必须改写成包内相对路径，
+    否则解压双击打开时图全是破图。
+    """
     article = bundle["article"]
     theme = themes.get_theme(article["theme"])
-    body_html = export.render_fragment(article["content"], theme.key)
+
+    markdown, inline_files = media.to_relative(article["content"] or "")
+    body_html = export.render_fragment(markdown, theme.key)
     page_html = export.standalone_page(
         title=article["title"] or "未命名文章",
         body_html=body_html,
@@ -812,12 +823,13 @@ def build_package(bundle: dict[str, Any]) -> tuple[bytes, str]:
             for hit in bundle["hits"]
         ],
         "figure_count": bundle["figure_count"],
+        "inline_images": [name for name, _ in inline_files],
         "model": article["model"],
     }
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle_zip:
-        bundle_zip.writestr("正文.md", article["content"])
+        bundle_zip.writestr("正文.md", markdown)
         bundle_zip.writestr("正文.html", page_html)
         bundle_zip.writestr(
             "物料.json", json.dumps(manifest, ensure_ascii=False, indent=2)
@@ -826,6 +838,8 @@ def build_package(bundle: dict[str, Any]) -> tuple[bytes, str]:
             asset_path = Path(asset["path"])
             if asset_path.exists():
                 bundle_zip.write(asset_path, arcname=f"图片/{asset_path.name}")
+        for name, path in inline_files:
+            bundle_zip.write(path, arcname=f"图片/{name}")
 
     filename = _safe_filename(article["title"] or "article") + ".zip"
     return buffer.getvalue(), filename
