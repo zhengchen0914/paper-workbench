@@ -11,7 +11,14 @@
   </p>
 </div>
 
-{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if msg %}
+<div class="banner {{ 'warn' if extract_running else 'ok' }}">
+  {% if extract_running %}<span class="spin">◐</span>{% endif %}
+  {{ msg }}
+  {% if extract_running %}<span class="muted small">— 页面每 4 秒自动刷新</span>{% endif %}
+</div>
+{% endif %}
+{% if extract_running %}<meta http-equiv="refresh" content="4">{% endif %}
 
 <section class="stats kb-stats">
   <div class="stat"><span class="num">{{ counts.get('pending', 0) }}</span><span class="cap">待确认</span></div>

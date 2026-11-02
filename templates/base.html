@@ -50,6 +50,17 @@ document.querySelectorAll('.banner').forEach((box) => {
   });
   box.appendChild(button);
 });
+
+// 提示语用完就从地址栏摘掉：否则刷新一次，已经过时的横幅会一直重复出现。
+// 这是「配图提示卡在已排入队列」那个问题的通用解法，放在基模板里对所有页面生效。
+if (location.search) {
+  const url = new URL(location.href);
+  if (url.searchParams.has('msg') || url.searchParams.has('err')) {
+    url.searchParams.delete('msg');
+    url.searchParams.delete('err');
+    history.replaceState(null, '', url.pathname + (url.search || ''));
+  }
+}
 </script>
 </body>
 </html>

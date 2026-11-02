@@ -37,17 +37,7 @@
 {% endif %}
 {% if illustration_running %}<meta http-equiv="refresh" content="4">{% endif %}
 
-<script>
-// 把 ?msg=/?err= 从地址栏摘掉：否则刷新一次，做完的提示就永远挂在那里
-if (location.search) {
-  const url = new URL(location.href);
-  if (url.searchParams.has('msg') || url.searchParams.has('err')) {
-    url.searchParams.delete('msg');
-    url.searchParams.delete('err');
-    history.replaceState(null, '', url.pathname + (url.search || ''));
-  }
-}
-</script>
+<!-- 地址栏清理已移到 base.html，全站生效 -->
 
 {% if article.status == 'running' %}
   {% include "_article_panel.html" %}

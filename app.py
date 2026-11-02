@@ -895,6 +895,19 @@ def radar_page(request: Request, status: str = "new", msg: str = "") -> HTMLResp
         for line in (settings.get("radar_keywords") or "").splitlines()
         if line.strip()
     ]
+    # 摘要评分作业的实时状态：别让「抓取完成，已在后台打分」一直挂着
+    scoring_running = False
+    job = db.one(
+        "SELECT status, message FROM jobs WHERE kind='radar' "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1"
+    )
+    if job:
+        if job["status"] in ("queued", "running"):
+            msg = job["message"] or "正在读摘要打分…"
+            scoring_running = True
+        elif job["status"] == "done" and ("打分" in msg or "抓取完成" in msg):
+            msg = f"{msg.split('，已在后台')[0]}；{job['message']}"
+
     return render(
         request,
         "radar.html",
@@ -904,6 +917,7 @@ def radar_page(request: Request, status: str = "new", msg: str = "") -> HTMLResp
         counts=counts,
         keywords=keywords,
         last_fetch=settings.get("radar_last_fetch", ""),
+        scoring_running=scoring_running,
         msg=msg,
     )
 
@@ -1437,6 +1451,17 @@ def inbox(request: Request, msg: str = "") -> HTMLResponse:
         row["word_count"] = len((row.get("draft_content") or "").strip())
         row["figure_note"] = ""
     selected = [row for row in rows if row["selected"]]
+
+    # 批量作业的实时进度，别让「已排入队列 N 篇」一直挂着
+    active = db.one(
+        "SELECT COUNT(*) AS n FROM jobs WHERE kind='reading' AND status IN ('queued','running')"
+    )["n"]
+    batch_running = bool(active)
+    if batch_running:
+        msg = f"队列中 {active} 篇正在生成…"
+    elif msg.startswith("已排入队列"):
+        msg = "队列已清空"
+
     return render(
         request,
         "inbox.html",
@@ -1444,6 +1469,7 @@ def inbox(request: Request, msg: str = "") -> HTMLResponse:
         papers=rows,
         selected=selected,
         selected_ready=sum(1 for row in selected if row["draft_status"] == "ready"),
+        batch_running=batch_running,
         msg=msg,
     )
 
@@ -1560,6 +1586,21 @@ def knowledge_page(
         "AND NOT EXISTS (SELECT 1 FROM insights i WHERE i.draft_uid = d.uid) "
         "ORDER BY d.updated_at DESC"
     )
+    # 抽取作业的实时状态优先于 URL 里的静态提示（跟配图同一个坑）
+    extract_running = False
+    job = db.one(
+        "SELECT status, message FROM jobs WHERE kind='insights' "
+        "ORDER BY created_at DESC, rowid DESC LIMIT 1"
+    )
+    if job:
+        if job["status"] in ("queued", "running"):
+            msg = job["message"] or "正在抽取创新点…"
+            extract_running = True
+        elif job["status"] == "done" and msg.startswith("已排队"):
+            msg = f"抽取完成：{job['message']}"
+        elif job["status"] == "failed" and msg.startswith("已排队"):
+            msg = f"抽取失败：{job['message']}"
+
     return render(
         request,
         "knowledge.html",
@@ -1575,6 +1616,7 @@ def knowledge_page(
         novelty_types=knowledge.NOVELTY_TYPES,
         extractable=extractable,
         skipped=skipped,
+        extract_running=extract_running,
         msg=msg,
     )
 

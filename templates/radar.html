@@ -10,7 +10,14 @@
   </p>
 </div>
 
-{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if msg %}
+<div class="banner {{ 'warn' if scoring_running else 'ok' }}">
+  {% if scoring_running %}<span class="spin">◐</span>{% endif %}
+  {{ msg }}
+  {% if scoring_running %}<span class="muted small">— 页面每 5 秒自动刷新</span>{% endif %}
+</div>
+{% endif %}
+{% if scoring_running %}<meta http-equiv="refresh" content="5">{% endif %}
 
 <section class="actionbar">
   <form method="post" action="/radar/fetch" class="genform">
