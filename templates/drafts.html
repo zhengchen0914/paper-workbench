@@ -17,6 +17,19 @@
 {% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
 {% if err %}<div class="banner warn">{{ err }}</div>{% endif %}
 
+{% set base = '/drafts?kind=article' if kind == 'article' else '/drafts' %}
+<section class="tabs-row status-filter">
+  <a class="tab {{ 'on' if not status else '' }}" href="{{ base }}">
+    全部 <span class="tab-count">{{ total }}</span>
+  </a>
+  {% for tab in status_tabs %}
+    <a class="tab {{ 'on' if status == tab.key else '' }}"
+       href="{{ base }}{{ '&' if '?' in base else '?' }}status={{ tab.key }}">
+      {{ tab.label }} <span class="tab-count">{{ tab.n }}</span>
+    </a>
+  {% endfor %}
+</section>
+
 {% if drafts %}
 <table class="table">
   <thead><tr><th>标题</th><th>状态</th><th>字数</th><th>引擎</th><th>更新时间</th><th></th></tr></thead>
@@ -53,7 +66,9 @@
 </table>
 {% else %}
 <p class="muted">
-  {% if kind == 'article' %}还没有公众号文章。打开一篇已完成的解读，点「生成公众号文章」。
+  {% if status %}
+    这个状态下没有稿件。 <a href="{{ base }}">看全部</a>
+  {% elif kind == 'article' %}还没有公众号文章。打开一篇已完成的解读，点「生成公众号文章」。
   {% else %}还没有稿件。去 <a href="/library">论文库</a> 生成第一篇。{% endif %}
 </p>
 {% endif %}

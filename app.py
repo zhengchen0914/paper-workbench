@@ -378,14 +378,60 @@ def save_draft(uid: str, content: str = Form(default=""), title: str = Form(defa
 
 
 @app.get("/drafts", response_class=HTMLResponse)
-def drafts_list(request: Request, kind: str = "reading", msg: str = "", err: str = "") -> HTMLResponse:
-    rows = db.query(
-        "SELECT d.*, p.filename FROM drafts d LEFT JOIN papers p ON p.uid = d.paper_uid "
-        "WHERE d.kind=? AND d.status != 'empty' ORDER BY d.updated_at DESC",
-        (kind,),
-    )
+def drafts_list(
+    request: Request,
+    kind: str = "reading",
+    status: str = "",
+    msg: str = "",
+    err: str = "",
+) -> HTMLResponse:
+    status = status.strip()
+    if status:
+        rows = db.query(
+            "SELECT d.*, p.filename FROM drafts d LEFT JOIN papers p ON p.uid = d.paper_uid "
+            "WHERE d.kind=? AND d.status=? ORDER BY d.updated_at DESC",
+            (kind, status),
+        )
+    else:
+        rows = db.query(
+            "SELECT d.*, p.filename FROM drafts d LEFT JOIN papers p ON p.uid = d.paper_uid "
+            "WHERE d.kind=? AND d.status != 'empty' ORDER BY d.updated_at DESC",
+            (kind,),
+        )
+
+    # 各状态计数，用来渲染筛选条（空稿件不参与统计，否则会被 41 个「待生成」淹没）
+    counts = {
+        row["status"]: row["n"]
+        for row in db.query(
+            "SELECT status, COUNT(*) AS n FROM drafts WHERE kind=? AND status != 'empty' "
+            "GROUP BY status",
+            (kind,),
+        )
+    }
+    total = sum(counts.values())
+
+    # 按业务流的顺序排，而不是字典序：待终审 → 已通过 → 已发表 → 其它
+    status_order = [
+        "review", "approved", "published", "awaiting", "running", "queued", "ready", "failed"
+    ]
+    status_tabs = [
+        {"key": key, "label": STATUS_LABELS.get(key, key), "n": counts[key]}
+        for key in status_order
+        if counts.get(key)
+    ]
+
     return render(
-        request, "drafts.html", active="drafts", drafts=rows, kind=kind, msg=msg, err=err
+        request,
+        "drafts.html",
+        active="drafts",
+        drafts=rows,
+        kind=kind,
+        status=status,
+        counts=counts,
+        total=total,
+        status_tabs=status_tabs,
+        msg=msg,
+        err=err,
     )
 
 

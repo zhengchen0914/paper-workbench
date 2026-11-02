@@ -744,3 +744,11 @@ fieldset input { margin-bottom: 4px; }
   animation: spin 1.1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* 状态筛选条：标签后面的计数 */
+.status-filter { margin-bottom: 12px; }
+.tab-count {
+  display: inline-block; margin-left: 4px; padding: 0 5px;
+  border-radius: 8px; background: rgba(0, 0, 0, 0.06);
+  font-size: 11px; color: var(--muted);
+}
+.tab.on .tab-count { background: rgba(255, 255, 255, 0.22); color: #fff; }
