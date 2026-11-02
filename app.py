@@ -73,6 +73,7 @@ STATUS_LABELS = {
     "awaiting": "待 DSH 产出",
     "review": "待终审",
     "approved": "已通过",
+    "published": "已发表",
 }
 
 ENGINE_LABELS = {"builtin": "内置模型", "dsh": "交给 DSH"}
@@ -652,6 +653,24 @@ def repackage_article(uid: str):
             "UPDATE drafts SET error=?, updated_at=? WHERE uid=?", (message, db.now(), uid)
         )
     return RedirectResponse(f"/article/{uid}", status_code=303)
+
+
+@app.post("/article/{uid}/publish")
+def publish_article(uid: str, back: str = Form(default="/drafts?kind=article")):
+    """标记为已发表。发表这个动作在平台侧做，这里只登记状态。"""
+    article = db.one("SELECT uid FROM drafts WHERE uid=? AND kind='article'", (uid,))
+    if article is None:
+        return RedirectResponse(
+            _back_with(back, "err", "文章不存在"), status_code=303
+        )
+    db.execute(
+        "UPDATE drafts SET status=?, updated_at=? WHERE uid=?",
+        ("published", db.now(), uid),
+    )
+    db.log_event(uid, "article:published", "")
+    return RedirectResponse(
+        _back_with(back, "msg", "已标记为已发表"), status_code=303
+    )
 
 
 @app.post("/article/{uid}/approve")

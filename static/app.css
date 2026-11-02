@@ -167,6 +167,7 @@ code { font-family: var(--mono); font-size: 0.88em; background: #efeade; padding
 .pill.running { background: var(--warn-soft); color: var(--warn); }
 .pill.failed { background: var(--bad-soft); color: var(--bad); }
 .pill.awaiting { background: var(--info-soft); color: var(--info); }
+.pill.published { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
 
 /* ---------- 工具条 ---------- */
 .toolbar {

@@ -32,6 +32,13 @@
         {% if d.kind == 'article' %}
           <a class="btn tiny" href="/article/{{ d.uid }}">终审</a>
           <a class="btn tiny ghost" href="/draft/{{ d.uid }}">编辑</a>
+          {% if d.status != 'published' %}
+          <form method="post" action="/article/{{ d.uid }}/publish" class="inline">
+            <input type="hidden" name="back" value="/drafts?kind=article">
+            <button class="btn tiny ghost" type="submit"
+                    title="平台侧发表后，在这里登记状态">已发表</button>
+          </form>
+          {% endif %}
         {% else %}
           <a class="btn tiny" href="/draft/{{ d.uid }}">打开</a>
         {% endif %}
