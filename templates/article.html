@@ -171,7 +171,6 @@
     <button class="btn primary" type="submit" title="导出交付包与 HTML 到 data/exports 并打开文件夹">导出到文件夹</button>
   </form>
   <a class="btn ghost" href="/article/{{ article.uid }}/package.zip">下载交付包</a>
-  <a class="btn ghost" href="/article/{{ article.uid }}/export.md">下载 Markdown</a>
   <a class="btn ghost" href="/draft/{{ article.uid }}">编辑正文</a>
   <form method="post" action="/article/{{ article.uid }}/repackage" class="inline">
     <button class="btn ghost" type="submit">重新生成物料</button>

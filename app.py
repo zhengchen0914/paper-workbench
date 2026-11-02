@@ -714,24 +714,6 @@ def set_article_theme(uid: str, theme: str = Form(default="classic")):
     return RedirectResponse(f"/article/{uid}", status_code=303)
 
 
-@app.get("/article/{uid}/export.md")
-def export_article_markdown(uid: str) -> Response:
-    article = db.one("SELECT * FROM drafts WHERE uid=?", (uid,))
-    if article is None:
-        return RedirectResponse("/drafts", status_code=303)
-    payload = article["content"].encode("utf-8")
-    filename = _safe_filename(article["title"] or "article") + ".md"
-    # 头部只能放 latin-1，中文文件名走 RFC 5987 的 filename*
-    disposition = (
-        f'attachment; filename="article.md"; filename*=UTF-8\'\'{quote(filename)}'
-    )
-    return Response(
-        payload,
-        media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": disposition},
-    )
-
-
 def _safe_filename(name: str) -> str:
     cleaned = re.sub(r'[\\/:*?"<>|\r\n]+', "_", name).strip()
     return cleaned[:80] or "article"
